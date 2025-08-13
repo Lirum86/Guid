@@ -35,6 +35,20 @@ function SettingsTab.Build(ui, afterTab, configManager)
         
         return tab
     end
+    
+    -- Wait for ConfigManager initialization
+    if not configManager.isInitialized then
+        print("⏳ Waiting for ConfigManager initialization...")
+        local attempts = 0
+        while not configManager.isInitialized and attempts < 20 do
+            task.wait(0.5)
+            attempts = attempts + 1
+        end
+        
+        if not configManager.isInitialized then
+            print("⚠️ ConfigManager initialization timeout - proceeding anyway")
+        end
+    end
 
     -- Window 1: UI Settings
     local winKeys = tab:CreateWindow("UI Settings")
@@ -63,36 +77,76 @@ function SettingsTab.Build(ui, afterTab, configManager)
     -- Window 2: Executor Info
     local infoWindow = tab:CreateWindow("Executor Info")
     
-    -- Get executor info from ConfigManager
-    local executorInfo = configManager:getExecutorInfo()
+    -- Get executor info from ConfigManager (safe check)
+    local executorInfo = nil
+    local hasExecutorInfo = false
     
-    infoWindow:CreateButton("Executor: " .. executorInfo.name, function()
-        print("🖥️ Executor:", executorInfo.name)
-        print("📁 File System:", executorInfo.hasFileSystem)
-        print("🌐 HTTP Support:", executorInfo.hasHttp)
-        print("🔧 Capabilities:", table.concat(executorInfo.capabilities, ", "))
-    end)
-    
-    infoWindow:CreateButton("File System: " .. (executorInfo.hasFileSystem and "✅ Supported" or "❌ Not Supported"), function()
-        print("📁 File System Functions:")
-        for funcName, supported in pairs(executorInfo.functions) do
-            print("  " .. funcName .. ": " .. (supported and "✅" or "❌"))
-        end
-    end)
-    
-    infoWindow:CreateButton("HTTP Requests: " .. (executorInfo.hasHttp and "✅ Supported" or "❌ Not Supported"), function()
-        print("🌐 HTTP Support:", executorInfo.hasHttp)
-    end)
-
-    -- Early return if no file system support
-    if not executorInfo.hasFileSystem then
-        print("❌ Executor doesn't support file system - Config features disabled")
-        local warningWindow = tab:CreateWindow("⚠️ Warning")
-        warningWindow:CreateButton("File System Required", function()
-            configManager:safeNotify('error', 'File System Error', 
-                'Your executor doesn\'t support file operations. Config features are disabled.', 5)
+    if configManager and configManager.getExecutorInfo then
+        local success, info = pcall(function()
+            return configManager:getExecutorInfo()
         end)
-        return tab
+        
+        if success and info then
+            executorInfo = info
+            hasExecutorInfo = true
+        end
+    end
+    
+    if hasExecutorInfo then
+        infoWindow:CreateButton("Executor: " .. executorInfo.name, function()
+            print("🖥️ Executor:", executorInfo.name)
+            print("📁 File System:", executorInfo.hasFileSystem)
+            print("🌐 HTTP Support:", executorInfo.hasHttp)
+            print("🔧 Capabilities:", table.concat(executorInfo.capabilities, ", "))
+        end)
+        
+        infoWindow:CreateButton("File System: " .. (executorInfo.hasFileSystem and "✅ Supported" or "❌ Not Supported"), function()
+            print("📁 File System Functions:")
+            for funcName, supported in pairs(executorInfo.functions) do
+                print("  " .. funcName .. ": " .. (supported and "✅" or "❌"))
+            end
+        end)
+        
+        infoWindow:CreateButton("HTTP Requests: " .. (executorInfo.hasHttp and "✅ Supported" or "❌ Not Supported"), function()
+            print("🌐 HTTP Support:", executorInfo.hasHttp)
+        end)
+        
+        -- Early return if no file system support
+        if not executorInfo.hasFileSystem then
+            print("❌ Executor doesn't support file system - Config features disabled")
+            local warningWindow = tab:CreateWindow("⚠️ Warning")
+            warningWindow:CreateButton("File System Required", function()
+                if configManager and configManager.safeNotify then
+                    configManager:safeNotify('error', 'File System Error', 
+                        'Your executor doesn\'t support file operations. Config features are disabled.', 5)
+                else
+                    print("❌ Your executor doesn't support file operations. Config features are disabled.")
+                end
+            end)
+            return tab
+        end
+    else
+        -- Fallback executor detection
+        local hasFileSystem = (writefile and readfile and isfolder and makefolder and delfile and listfiles)
+        local hasHttp = (syn and syn.request) or (http and http.request) or request
+        
+        infoWindow:CreateButton("File System: " .. (hasFileSystem and "✅ Supported" or "❌ Not Supported"), function()
+            print("📁 File System Check:", hasFileSystem)
+        end)
+        
+        infoWindow:CreateButton("HTTP Requests: " .. (hasHttp and "✅ Supported" or "❌ Not Supported"), function()
+            print("🌐 HTTP Check:", hasHttp)
+        end)
+        
+        if not hasFileSystem then
+            print("❌ Executor doesn't support file system - Config features disabled")
+            local warningWindow = tab:CreateWindow("⚠️ Warning")
+            warningWindow:CreateButton("File System Required", function()
+                print("❌ Your executor doesn't support file operations (writefile/readfile)")
+                print("Config saving/loading will not work!")
+            end)
+            return tab
+        end
     end
 
     print("✅ ConfigManager available with file system support")
@@ -118,6 +172,8 @@ function SettingsTab.Build(ui, afterTab, configManager)
     
     -- Get initial config list
     local function getConfigList()
+        if not configManager then return {"Default"} end
+        
         local success, list = pcall(function()
             return configManager:getConfigList()
         end)
@@ -131,14 +187,22 @@ function SettingsTab.Build(ui, afterTab, configManager)
 
     -- Update dropdown with current configs
     local function updateConfigDropdown()
-        if not configsDropdown then return end
+        if not configsDropdown or not configManager then return end
         
-        local configList = getConfigList()
+        local success, configList = pcall(function()
+            return getConfigList()
+        end)
+        
+        if not success then
+            print("❌ Failed to get config list")
+            return
+        end
+        
         print("🔄 Updating dropdown with configs: " .. table.concat(configList, ", "))
         
-        pcall(function()
+        local updateSuccess = pcall(function()
             if configsDropdown.SetOptions then
-                configsDropdown.SetOptions(configsDropdown, configList)
+                configsDropdown:SetOptions(configList)
             end
             
             -- Update selected value
@@ -146,10 +210,14 @@ function SettingsTab.Build(ui, afterTab, configManager)
             if currentConfig and table.find(configList, currentConfig) then
                 configState.selectedConfig = currentConfig
                 if configsDropdown.SetValue then
-                    configsDropdown.SetValue(configsDropdown, currentConfig)
+                    configsDropdown:SetValue(currentConfig)
                 end
             end
         end)
+        
+        if not updateSuccess then
+            print("❌ Failed to update dropdown")
+        end
     end
 
     -- Create Dropdown
@@ -162,7 +230,11 @@ function SettingsTab.Build(ui, afterTab, configManager)
     end)
 
     -- Set dropdown reference in ConfigManager
-    configManager:setDropdownReference(configsDropdown)
+    if configManager and configManager.setDropdownReference then
+        pcall(function()
+            configManager:setDropdownReference(configsDropdown)
+        end)
+    end
 
     -- CONFIG OPERATION BUTTONS
 
@@ -170,16 +242,30 @@ function SettingsTab.Build(ui, afterTab, configManager)
     winCfg:CreateButton("Create New Config", function()
         print("🔄 Creating new config...")
         
+        if not configManager then
+            print("❌ ConfigManager not available")
+            return
+        end
+        
         local name = configState.newConfigName
         if not name or name == "" then
-            configManager:safeNotify('error', 'Invalid Name', 'Please enter a config name!', 3)
+            if configManager.safeNotify then
+                configManager:safeNotify('error', 'Invalid Name', 'Please enter a config name!', 3)
+            else
+                print("❌ Please enter a config name!")
+            end
             return
         end
         
         -- Create using ConfigManager
-        local success = configManager:createNewConfig(name)
+        local success = pcall(function()
+            return configManager:createNewConfig(name)
+        end)
+        
         if success then
-            configNameBox.SetValue(configNameBox, "")
+            if configNameBox.SetValue then
+                configNameBox:SetValue("")
+            end
             configState.newConfigName = ""
             configState.selectedConfig = name
             
@@ -188,42 +274,75 @@ function SettingsTab.Build(ui, afterTab, configManager)
                 task.wait(0.3)
                 updateConfigDropdown()
             end)
+        else
+            print("❌ Failed to create config")
         end
     end)
 
     -- Save Config Button  
     winCfg:CreateButton("Save Current Settings", function()
         print("💾 Saving current settings...")
-        configManager:saveConfig(configState.selectedConfig)
+        
+        if not configManager then
+            print("❌ ConfigManager not available")
+            return
+        end
+        
+        local success = pcall(function()
+            return configManager:saveConfig(configState.selectedConfig)
+        end)
+        
+        if not success then
+            print("❌ Failed to save config")
+        end
     end)
 
     -- Load Config Button
     winCfg:CreateButton("Load Selected Config", function()
         print("📂 Loading selected config...")
+        
+        if not configManager then
+            print("❌ ConfigManager not available")
+            return
+        end
+        
         configState.isLoading = true
         
-        local success = configManager:loadConfig(configState.selectedConfig)
+        local success = pcall(function()
+            return configManager:loadConfig(configState.selectedConfig)
+        end)
+        
         if success then
             -- Update UI elements to reflect loaded settings
             task.spawn(function()
                 task.wait(0.1)
                 
                 -- Update toggle key display
-                local currentKey = ui:GetToggleKey()
-                if currentKey and toggleKeybind.SetValue then
-                    toggleKeybind.SetValue(toggleKeybind, currentKey.Name)
+                if ui and ui.GetToggleKey and toggleKeybind and toggleKeybind.SetValue then
+                    local currentKey = ui:GetToggleKey()
+                    if currentKey then
+                        pcall(function()
+                            toggleKeybind:SetValue(currentKey.Name)
+                        end)
+                    end
                 end
                 
                 -- Update watermark checkbox
-                if watermarkToggle.SetValue then
-                    watermarkToggle.SetValue(watermarkToggle, ui._watermarkVisible ~= false)
+                if ui and watermarkToggle and watermarkToggle.SetValue then
+                    pcall(function()
+                        watermarkToggle:SetValue(ui._watermarkVisible ~= false)
+                    end)
                 end
                 
                 -- Update theme color picker
-                if ui.options and ui.options.theme and ui.options.theme.primary and themePicker.SetValue then
-                    themePicker.SetValue(themePicker, ui.options.theme.primary)
+                if ui and ui.options and ui.options.theme and ui.options.theme.primary and themePicker and themePicker.SetValue then
+                    pcall(function()
+                        themePicker:SetValue(ui.options.theme.primary)
+                    end)
                 end
             end)
+        else
+            print("❌ Failed to load config")
         end
         
         configState.isLoading = false
@@ -233,13 +352,23 @@ function SettingsTab.Build(ui, afterTab, configManager)
     winCfg:CreateButton("Delete Selected Config", function()
         print("🗑️ Deleting selected config...")
         
-        local success = configManager:deleteConfig(configState.selectedConfig)
+        if not configManager then
+            print("❌ ConfigManager not available")
+            return
+        end
+        
+        local success = pcall(function()
+            return configManager:deleteConfig(configState.selectedConfig)
+        end)
+        
         if success then
             configState.selectedConfig = "Default"
             task.spawn(function()
                 task.wait(0.3)
                 updateConfigDropdown()
             end)
+        else
+            print("❌ Failed to delete config")
         end
     end)
 
@@ -252,14 +381,30 @@ function SettingsTab.Build(ui, afterTab, configManager)
         autoLoadEnabled = enabled
         print("🔄 Auto Load: " .. tostring(enabled))
         
-        local targetConfig = enabled and configState.selectedConfig or nil
-        configManager:setAutoLoad(targetConfig)
+        if not configManager then return end
+        
+        local success = pcall(function()
+            local targetConfig = enabled and configState.selectedConfig or nil
+            return configManager:setAutoLoad(targetConfig)
+        end)
+        
+        if not success then
+            print("❌ Failed to set auto load")
+        end
     end)
 
     -- Config Info Button
     advancedWindow:CreateButton("Show Config Info", function()
-        local metadata = configManager:getConfigMetadata(configState.selectedConfig)
-        if metadata then
+        if not configManager then 
+            print("❌ ConfigManager not available")
+            return 
+        end
+        
+        local success, metadata = pcall(function()
+            return configManager:getConfigMetadata(configState.selectedConfig)
+        end)
+        
+        if success and metadata then
             print("📋 Config Info for '" .. configState.selectedConfig .. "':")
             print("Version: " .. (metadata.version or "Unknown"))
             print("Created: " .. (metadata.created and os.date("%Y-%m-%d %H:%M:%S", metadata.created) or "Unknown"))
@@ -269,11 +414,17 @@ function SettingsTab.Build(ui, afterTab, configManager)
             print("Game ID: " .. (metadata.game or "Unknown"))
             print("Description: " .. (metadata.description or "No description"))
             
-            configManager:safeNotify('info', 'Config Info', 
-                'Check console for detailed information about "' .. configState.selectedConfig .. '"', 4)
+            if configManager.safeNotify then
+                configManager:safeNotify('info', 'Config Info', 
+                    'Check console for detailed information about "' .. configState.selectedConfig .. '"', 4)
+            end
         else
-            configManager:safeNotify('error', 'No Info', 
-                'No metadata available for "' .. configState.selectedConfig .. '"', 3)
+            if configManager.safeNotify then
+                configManager:safeNotify('error', 'No Info', 
+                    'No metadata available for "' .. configState.selectedConfig .. '"', 3)
+            else
+                print("❌ No metadata available for config '" .. configState.selectedConfig .. "'")
+            end
         end
     end)
 
@@ -282,18 +433,43 @@ function SettingsTab.Build(ui, afterTab, configManager)
     
     -- Export Config Button
     importExportWindow:CreateButton("Export to Clipboard", function()
-        local exportData = configManager:exportConfig(configState.selectedConfig)
-        if exportData then
+        if not configManager then
+            print("❌ ConfigManager not available")
+            return
+        end
+        
+        local success, exportData = pcall(function()
+            return configManager:exportConfig(configState.selectedConfig)
+        end)
+        
+        if success and exportData then
             if setclipboard then
-                setclipboard(exportData)
-                configManager:safeNotify('success', 'Export Success', 
-                    'Config "' .. configState.selectedConfig .. '" copied to clipboard!', 4)
+                local clipSuccess = pcall(function()
+                    setclipboard(exportData)
+                end)
+                if clipSuccess then
+                    if configManager.safeNotify then
+                        configManager:safeNotify('success', 'Export Success', 
+                            'Config "' .. configState.selectedConfig .. '" copied to clipboard!', 4)
+                    end
+                else
+                    print("📋 Export Data for '" .. configState.selectedConfig .. "':")
+                    print(exportData)
+                    if configManager.safeNotify then
+                        configManager:safeNotify('info', 'Export Data', 
+                            'Config data printed to console (clipboard failed)', 4)
+                    end
+                end
             else
                 print("📋 Export Data for '" .. configState.selectedConfig .. "':")
                 print(exportData)
-                configManager:safeNotify('info', 'Export Data', 
-                    'Config data printed to console (clipboard not supported)', 4)
+                if configManager.safeNotify then
+                    configManager:safeNotify('info', 'Export Data', 
+                        'Config data printed to console (clipboard not supported)', 4)
+                end
             end
+        else
+            print("❌ Failed to export config")
         end
     end)
 
@@ -302,29 +478,59 @@ function SettingsTab.Build(ui, afterTab, configManager)
     local importNameBox = importExportWindow:CreateTextBox("Import Name", "New config name...", function() end)
     
     importExportWindow:CreateButton("Import Config", function()
-        local importData = importDataBox.GetValue and importDataBox:GetValue() or ""
-        local importName = importNameBox.GetValue and importNameBox:GetValue() or ""
+        if not configManager then
+            print("❌ ConfigManager not available")
+            return
+        end
+        
+        local importData = ""
+        local importName = ""
+        
+        if importDataBox.GetValue then
+            importData = importDataBox:GetValue() or ""
+        end
+        
+        if importNameBox.GetValue then
+            importName = importNameBox:GetValue() or ""
+        end
         
         if importData == "" then
-            configManager:safeNotify('error', 'Import Error', 'Please paste config data first!', 3)
+            if configManager.safeNotify then
+                configManager:safeNotify('error', 'Import Error', 'Please paste config data first!', 3)
+            else
+                print("❌ Please paste config data first!")
+            end
             return
         end
         
         if importName == "" then
-            configManager:safeNotify('error', 'Import Error', 'Please enter a name for the imported config!', 3)
+            if configManager.safeNotify then
+                configManager:safeNotify('error', 'Import Error', 'Please enter a name for the imported config!', 3)
+            else
+                print("❌ Please enter a name for the imported config!")
+            end
             return
         end
         
-        local success = configManager:importConfig(importData, importName)
+        local success = pcall(function()
+            return configManager:importConfig(importData, importName)
+        end)
+        
         if success then
-            importDataBox.SetValue(importDataBox, "")
-            importNameBox.SetValue(importNameBox, "")
+            if importDataBox.SetValue then
+                importDataBox:SetValue("")
+            end
+            if importNameBox.SetValue then
+                importNameBox:SetValue("")
+            end
             configState.selectedConfig = importName
             
             task.spawn(function()
                 task.wait(0.3)
                 updateConfigDropdown()
             end)
+        else
+            print("❌ Failed to import config")
         end
     end)
 
@@ -332,29 +538,50 @@ function SettingsTab.Build(ui, afterTab, configManager)
     local function initializeSettingsTab()
         print("🔄 Initializing Settings Tab...")
         
+        if not configManager then
+            print("⚠️ ConfigManager not available - skipping initialization")
+            return
+        end
+        
         -- Wait for ConfigManager to be ready
         local attempts = 0
         local maxAttempts = 20
         
-        while attempts < maxAttempts and not configManager.isInitialized do
+        while attempts < maxAttempts do
+            if configManager.isInitialized then
+                break
+            end
             attempts = attempts + 1
             task.wait(0.5)
         end
         
         if not configManager.isInitialized then
-            configManager:safeNotify('warning', 'Initialization Timeout', 
-                'ConfigManager initialization took longer than expected', 4)
+            if configManager.safeNotify then
+                configManager:safeNotify('warning', 'Initialization Timeout', 
+                    'ConfigManager initialization took longer than expected', 4)
+            else
+                print("⚠️ ConfigManager initialization took longer than expected")
+            end
         end
         
         -- Update initial state
-        configState.selectedConfig = configManager:getCurrentConfig() or "Default"
+        local success, currentConfig = pcall(function()
+            return configManager:getCurrentConfig()
+        end)
+        if success and currentConfig then
+            configState.selectedConfig = currentConfig
+        end
         
         -- Check for auto load setting
-        local autoLoadConfig = configManager:getAutoLoadConfig()
-        if autoLoadConfig and autoLoadConfig ~= "" then
+        local autoSuccess, autoLoadConfig = pcall(function()
+            return configManager:getAutoLoadConfig()
+        end)
+        if autoSuccess and autoLoadConfig and autoLoadConfig ~= "" then
             autoLoadEnabled = true
-            if autoLoadCheckbox.SetValue then
-                autoLoadCheckbox.SetValue(autoLoadCheckbox, true)
+            if autoLoadCheckbox and autoLoadCheckbox.SetValue then
+                pcall(function()
+                    autoLoadCheckbox:SetValue(true)
+                end)
             end
         end
         
@@ -365,9 +592,7 @@ function SettingsTab.Build(ui, afterTab, configManager)
         end)
         
         print("✅ Settings Tab initialized successfully")
-    end
-
-    -- Start initialization
+    end     -- Start initialization
     task.spawn(function()
         task.wait(1)  -- Wait for UI to be fully ready
         initializeSettingsTab()
