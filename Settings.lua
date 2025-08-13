@@ -1,6 +1,5 @@
-
--- SettingsTab.lua (Ultimate Fixed Version)
--- Completely rewritten Config system integration
+-- SettingsTab.lua (Executor Version)
+-- Settings Tab für Roblox Executors mit File System Support
 -- Exports: function Build(ui, afterTab) -> returns the created tab
 
 local SettingsTab = {}
@@ -14,32 +13,68 @@ function SettingsTab.Build(ui, afterTab, deps)
     local ConfigSystem = deps and deps.ConfigSystem or nil
     local tab = createTabAfter(ui, "Settings", "⚙️", afterTab)
 
+    print("🔧 Building Settings Tab for Executor...")
+
     -- Window 1: UI Settings
     local winKeys = tab:CreateWindow("UI Settings")
     
-    winKeys:CreateKeybind("UI Toggle", "RightShift", function(key)
-        print("UI Toggle Key: " .. key)
+    -- UI Toggle Keybind
+    local toggleKeybind = winKeys:CreateKeybind("UI Toggle Key", "RightShift", function(key)
+        print("🔑 UI Toggle Key: " .. key)
         ui:SetToggleKey(key)
     end)
     
-    winKeys:CreateCheckbox("Watermark", true, function(val)
-        print("Watermark: " .. tostring(val))
+    -- Watermark Toggle
+    local watermarkToggle = winKeys:CreateCheckbox("Show Watermark", true, function(val)
+        print("💧 Watermark: " .. tostring(val))
         ui:SetWatermarkVisible(val)
     end)
     
-    winKeys:CreateColorPicker("Theme Color", (ui.options and ui.options.theme and ui.options.theme.primary) or Color3.fromRGB(110,117,243), function(color, alpha)
-        print("Theme Color: " .. tostring(color))
-        ui:SetTheme({ primary = color })
+    -- Theme Color Picker
+    local themePicker = winKeys:CreateColorPicker("Theme Color", 
+        (ui.options and ui.options.theme and ui.options.theme.primary) or Color3.fromRGB(110,117,243), 
+        function(color, alpha)
+            print("🎨 Theme Color: " .. tostring(color))
+            ui:SetTheme({ primary = color })
+        end
+    )
+
+    -- Executor Info
+    local infoWindow = tab:CreateWindow("Executor Info")
+    
+    -- Check Executor Capabilities
+    local hasFileSystem = (writefile and readfile and isfolder and makefolder and delfile and listfiles)
+    local hasHttp = (syn and syn.request) or (http and http.request) or request
+    local hasWebSocket = syn and syn.websocket
+    
+    infoWindow:CreateButton("File System: " .. (hasFileSystem and "✅ Supported" or "❌ Not Supported"), function()
+        print("📁 File System Check:", hasFileSystem)
+    end)
+    
+    infoWindow:CreateButton("HTTP Requests: " .. (hasHttp and "✅ Supported" or "❌ Not Supported"), function()
+        print("🌐 HTTP Check:", hasHttp)
     end)
 
-    -- Early return if no ConfigSystem
+    -- Early return if no ConfigSystem or no file system
     if not ConfigSystem then
         print("⚠️ ConfigSystem not available")
         return tab
     end
+    
+    if not hasFileSystem then
+        print("❌ Executor doesn't support file system - Config features disabled")
+        local warningWindow = tab:CreateWindow("⚠️ Warning")
+        warningWindow:CreateButton("File System Required", function()
+            print("❌ Your executor doesn't support file operations (writefile/readfile)")
+            print("Config saving/loading will not work!")
+        end)
+        return tab
+    end
 
-    -- Window 2: Config System (completely rewritten)
-    local winCfg = tab:CreateWindow("Config")
+    print("✅ Config System available with file system support")
+
+    -- Window 2: Config Management
+    local winCfg = tab:CreateWindow("Config Management")
 
     -- State Management
     local configState = {
@@ -60,12 +95,12 @@ function SettingsTab.Build(ui, afterTab, deps)
     end
 
     -- Config Name Input
-    local configNameBox = winCfg:CreateTextBox("Config Name", "Enter name...", function(name)
+    local configNameBox = winCfg:CreateTextBox("New Config Name", "Enter config name...", function(name)
         configState.cfgName = name or ""
-        print("✏️ Config Name: " .. configState.cfgName)
+        print("✏️ Config Name Set: " .. configState.cfgName)
     end)
 
-    -- Configs Dropdown - Store reference properly
+    -- Config Dropdown
     local configsDropdown = nil
     
     -- Safe Config List Getter
@@ -81,20 +116,20 @@ function SettingsTab.Build(ui, afterTab, deps)
         return list
     end
 
-    -- CRITICAL FIX: Dropdown Refresh Function
+    -- Dropdown Refresh Function (Fixed for Executor)
     local function refreshDropdown(selectName)
         if not configsDropdown then 
-            warn("❌ Dropdown not ready")
+            warn("❌ Dropdown not initialized")
             return 
         end
         
-        print("🔄 Refreshing configs...")
+        print("🔄 Refreshing config list...")
         
         -- Get fresh config list
         local configList = getConfigList()
-        print("📋 Available configs: " .. table.concat(configList, ", "))
+        print("📋 Found configs: " .. table.concat(configList, ", "))
         
-        -- Update dropdown options with error handling
+        -- Update dropdown options
         local updateSuccess = pcall(function()
             if configsDropdown and configsDropdown.SetOptions then
                 configsDropdown.SetOptions(configList)
@@ -111,8 +146,8 @@ function SettingsTab.Build(ui, afterTab, deps)
         local targetConfig = selectName or configList[1] or "Default"
         configState.selectedConfig = targetConfig
         
-        -- CRITICAL: Wait for dropdown to be ready
-        task.wait(0.05)
+        -- Wait for dropdown to be ready
+        task.wait(0.1)
         
         local setSuccess = pcall(function()
             if configsDropdown and configsDropdown.SetValue then
@@ -126,20 +161,20 @@ function SettingsTab.Build(ui, afterTab, deps)
         end
     end
 
-    -- Create Dropdown with proper callback
+    -- Create Dropdown
     local initialConfigs = getConfigList()
-    configsDropdown = winCfg:CreateDropdown("Select Config", initialConfigs, "Default", function(selected)
+    configsDropdown = winCfg:CreateDropdown("Current Config", initialConfigs, "Default", function(selected)
         if selected and selected ~= "" then
             configState.selectedConfig = selected
-            print("📂 Config selected: " .. selected)
+            print("📂 Config Selected: " .. selected)
         end
     end)
 
-    -- BUTTONS WITH PROPER ERROR HANDLING
+    -- CONFIG BUTTONS
 
     -- Create Config Button
-    winCfg:CreateButton("Create Config", function()
-        print("🔄 Creating config...")
+    winCfg:CreateButton("Create New Config", function()
+        print("🔄 Creating new config...")
         
         if not ConfigSystem then
             warn("❌ ConfigSystem unavailable")
@@ -170,10 +205,12 @@ function SettingsTab.Build(ui, afterTab, deps)
         
         if createSuccess then
             print("✅ Config '" .. name .. "' created successfully")
+            configNameBox.SetValue("")
+            configState.cfgName = ""
             
-            -- Refresh after creation with proper delay
+            -- Refresh dropdown after creation
             task.spawn(function()
-                task.wait(0.2)  -- Longer delay to ensure creation is complete
+                task.wait(0.2)
                 refreshDropdown(name)
             end)
         else
@@ -181,25 +218,34 @@ function SettingsTab.Build(ui, afterTab, deps)
         end
     end)
 
-    -- Save Config Button
-    winCfg:CreateButton("Save Config", function()
-        print("💾 Saving config...")
+    -- Save Config Button  
+    winCfg:CreateButton("Save Current Settings", function()
+        print("💾 Saving current settings...")
         
         if not ConfigSystem or not configState.selectedConfig then
             warn("❌ ConfigSystem or selectedConfig unavailable")
             return
         end
         
-        -- Gather current settings
+        -- Gather current UI settings
         local theme = ui.options and ui.options.theme or { primary = Color3.fromRGB(110,117,243) }
         local saveData = {
+            -- Theme settings
             primary = colorToTbl(theme.primary),
+            
+            -- UI settings
             watermark = (ui._watermarkVisible ~= false),
             toggleKey = (ui:GetToggleKey() and ui:GetToggleKey().Name) or "RightShift",
-            savedAt = os.time()
+            
+            -- Metadata
+            savedAt = os.time(),
+            executor = true,
+            game = game.GameId or 0,
+            place = game.PlaceId or 0
         }
         
-        print("💾 Saving data: " .. game:GetService("HttpService"):JSONEncode(saveData))
+        print("💾 Saving data for '" .. configState.selectedConfig .. "':")
+        print(game:GetService("HttpService"):JSONEncode(saveData))
         
         -- Save config
         local saveSuccess = pcall(function()
@@ -207,15 +253,15 @@ function SettingsTab.Build(ui, afterTab, deps)
         end)
         
         if saveSuccess then
-            print("✅ Config '" .. configState.selectedConfig .. "' saved successfully")
+            print("✅ Config '" .. configState.selectedConfig .. "' saved successfully to file")
         else
             warn("❌ Failed to save config '" .. configState.selectedConfig .. "'")
         end
     end)
 
     -- Load Config Button
-    winCfg:CreateButton("Load Config", function()
-        print("📂 Loading config...")
+    winCfg:CreateButton("Load Selected Config", function()
+        print("📂 Loading selected config...")
         
         if not ConfigSystem or not configState.selectedConfig then
             warn("❌ ConfigSystem or selectedConfig unavailable")
@@ -229,12 +275,14 @@ function SettingsTab.Build(ui, afterTab, deps)
         
         if not success or type(data) ~= 'table' then
             warn("❌ Failed to load config '" .. configState.selectedConfig .. "'")
+            warn("Error: " .. tostring(data))
             return
         end
         
-        print("📊 Loaded data: " .. game:GetService("HttpService"):JSONEncode(data))
+        print("📊 Loaded config data:")
+        print(game:GetService("HttpService"):JSONEncode(data))
         
-        -- Apply settings with error handling
+        -- Apply theme settings
         if data.primary then 
             local colorSuccess = pcall(function()
                 local color = tblToColor(data.primary)
@@ -246,6 +294,7 @@ function SettingsTab.Build(ui, afterTab, deps)
             end
         end
         
+        -- Apply watermark setting
         if data.watermark ~= nil then 
             local wmSuccess = pcall(function()
                 ui:SetWatermarkVisible(data.watermark and true or false)
@@ -256,6 +305,7 @@ function SettingsTab.Build(ui, afterTab, deps)
             end
         end
         
+        -- Apply toggle key
         if data.toggleKey then 
             local keySuccess = pcall(function()
                 ui:SetToggleKey(data.toggleKey)
@@ -266,12 +316,12 @@ function SettingsTab.Build(ui, afterTab, deps)
             end
         end
         
-        print("✅ Config '" .. configState.selectedConfig .. "' loaded successfully")
+        print("✅ Config '" .. configState.selectedConfig .. "' loaded and applied successfully")
     end)
 
     -- Delete Config Button
-    winCfg:CreateButton("Delete Config", function()
-        print("🗑️ Deleting config...")
+    winCfg:CreateButton("Delete Selected Config", function()
+        print("🗑️ Deleting selected config...")
         
         if not ConfigSystem or not configState.selectedConfig then
             warn("❌ ConfigSystem or selectedConfig unavailable")
@@ -289,7 +339,7 @@ function SettingsTab.Build(ui, afterTab, deps)
         end)
         
         if deleteSuccess then
-            print("✅ Config '" .. configState.selectedConfig .. "' deleted")
+            print("✅ Config '" .. configState.selectedConfig .. "' deleted from file system")
             
             -- Refresh and select Default
             task.spawn(function()
@@ -301,8 +351,13 @@ function SettingsTab.Build(ui, afterTab, deps)
         end
     end)
 
+    -- Auto Load Section
+    local autoLoadWindow = tab:CreateWindow("Auto Load")
+    
     -- Auto Load Checkbox
-    winCfg:CreateCheckbox("Auto Load Config", false, function(enabled)
+    local autoLoadEnabled = false
+    local autoLoadCheckbox = autoLoadWindow:CreateCheckbox("Auto Load on Script Start", false, function(enabled)
+        autoLoadEnabled = enabled
         print("🔄 Auto Load: " .. tostring(enabled))
         
         if not ConfigSystem then return end
@@ -318,11 +373,27 @@ function SettingsTab.Build(ui, afterTab, deps)
         end
     end)
 
-    -- INITIALIZATION SEQUENCE
+    -- Config Info Button
+    autoLoadWindow:CreateButton("Show Config Info", function()
+        if not ConfigSystem or not configState.selectedConfig then return end
+        
+        local info = ConfigSystem.GetInfo(configState.selectedConfig)
+        if info then
+            print("📋 Config Info for '" .. configState.selectedConfig .. "':")
+            print("Created: " .. (info.created and os.date("%Y-%m-%d %H:%M:%S", info.created) or "Unknown"))
+            print("Modified: " .. (info.modified and os.date("%Y-%m-%d %H:%M:%S", info.modified) or "Never"))
+            print("Version: " .. (info.version or "Unknown"))
+            print("Executor: " .. tostring(info.executor or false))
+        else
+            print("❌ No info available for config '" .. configState.selectedConfig .. "'")
+        end
+    end)
+
+    -- INITIALIZATION
     local function initializeConfigSystem()
         if not ConfigSystem or configState.isInitialized then return end
         
-        print("🔄 Initializing config system...")
+        print("🔄 Initializing executor config system...")
         
         local initSuccess = pcall(function()
             -- Ensure Default config exists
@@ -334,32 +405,35 @@ function SettingsTab.Build(ui, afterTab, deps)
             -- Check for auto load
             local autoConfig = ConfigSystem.GetAutoLoad()
             if autoConfig and autoConfig ~= "" and ConfigSystem.Exists(autoConfig) then
-                print("🔄 Auto load found: " .. autoConfig)
+                print("🔄 Found auto load config: " .. autoConfig)
                 configState.selectedConfig = autoConfig
+                autoLoadCheckbox.SetValue(true)
+                autoLoadEnabled = true
             end
             
             configState.isInitialized = true
         end)
         
         if initSuccess then
-            print("✅ Config system initialized")
+            print("✅ Executor config system initialized")
             
             -- Initial dropdown refresh
             task.spawn(function()
-                task.wait(0.3)  -- Wait for everything to be ready
+                task.wait(0.5)
                 refreshDropdown(configState.selectedConfig)
             end)
         else
-            warn("❌ Config system initialization failed")
+            warn("❌ Executor config system initialization failed")
         end
     end
 
     -- Start initialization
     task.spawn(function()
-        task.wait(0.5)  -- Wait for UI to be fully ready
+        task.wait(1)  -- Wait for UI to be fully ready
         initializeConfigSystem()
     end)
 
+    print("✅ Settings Tab built successfully for executor")
     return tab
 end
 
