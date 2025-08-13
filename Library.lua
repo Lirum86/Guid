@@ -55,6 +55,10 @@ function ModernUI.new(options)
         licenseLabels = {},
     }
     
+    -- Element Registry für Config System
+    self._elementRegistry = {}
+    self._elementCounter = 0
+    
     self:_createMainFrame()
     self:_setupDragging()
     self:_setupToggleKeyListener()
@@ -805,7 +809,7 @@ function ModernUI:_createCheckbox(window, text, default, callback)
         updateCheckbox()
     end)
 
-    return {
+    local api = {
         SetValue = function(value)
             enabled = value
             updateCheckbox()
@@ -814,6 +818,28 @@ function ModernUI:_createCheckbox(window, text, default, callback)
             return enabled
         end
     }
+    
+    -- Element für Config System registrieren
+    if window and window.library then
+        local tabName = nil
+        local windowName = nil
+        
+        -- Tab und Window Namen aus dem Parent-Frame ermitteln
+        for _, tab in ipairs(window.library.tabs) do
+            if tab.frame and tab.frame:IsAncestorOf(window.frame) then
+                tabName = tab.frame.Name:gsub("Content", "")
+                break
+            end
+        end
+        
+        if window.frame and window.frame.Name then
+            windowName = window.frame.Name:gsub("Window", "")
+        end
+        
+        window.library:_registerElement("checkbox", tabName, windowName, text, api)
+    end
+    
+    return api
 end
 
 function ModernUI:_createMultiDropdown(window, text, options, defaults, callback)
@@ -1258,7 +1284,7 @@ function ModernUI:_createSlider(window, text, min, max, default, callback)
 
     updateSlider()
 
-    return {
+    local api = {
         SetValue = function(newValue)
             value = math.clamp(newValue, min, max)
             updateSlider()
@@ -1267,6 +1293,27 @@ function ModernUI:_createSlider(window, text, min, max, default, callback)
             return value
         end
     }
+    
+    -- Element für Config System registrieren
+    if window and window.library then
+        local tabName = nil
+        local windowName = nil
+        
+        for _, tab in ipairs(window.library.tabs) do
+            if tab.frame and tab.frame:IsAncestorOf(window.frame) then
+                tabName = tab.frame.Name:gsub("Content", "")
+                break
+            end
+        end
+        
+        if window.frame and window.frame.Name then
+            windowName = window.frame.Name:gsub("Window", "")
+        end
+        
+        window.library:_registerElement("slider", tabName, windowName, text, api)
+    end
+    
+    return api
 end
 
 function ModernUI:_createButton(window, text, callback)
@@ -1685,6 +1732,25 @@ function ModernUI:_createDropdown(window, text, options, default, callback)
         updateMenuCanvas()
     end
 
+    -- Element für Config System registrieren
+    if window and window.library then
+        local tabName = nil
+        local windowName = nil
+        
+        for _, tab in ipairs(window.library.tabs) do
+            if tab.frame and tab.frame:IsAncestorOf(window.frame) then
+                tabName = tab.frame.Name:gsub("Content", "")
+                break
+            end
+        end
+        
+        if window.frame and window.frame.Name then
+            windowName = window.frame.Name:gsub("Window", "")
+        end
+        
+        window.library:_registerElement("dropdown", tabName, windowName, text, api)
+    end
+    
     return api
 end
 
@@ -2014,11 +2080,30 @@ function ModernUI:_createColorPicker(window, text, default, callback)
         callback(colorPreview.BackgroundColor3, alpha)
     end
     function api.GetValue()
-            return colorPreview.BackgroundColor3
-        end
+        return colorPreview.BackgroundColor3
+    end
     function api.GetRGBA()
         local c = colorPreview.BackgroundColor3
         return c, alpha
+    end
+
+    -- Element für Config System registrieren
+    if window and window.library then
+        local tabName = nil
+        local windowName = nil
+        
+        for _, tab in ipairs(window.library.tabs) do
+            if tab.frame and tab.frame:IsAncestorOf(window.frame) then
+                tabName = tab.frame.Name:gsub("Content", "")
+                break
+            end
+        end
+        
+        if window.frame and window.frame.Name then
+            windowName = window.frame.Name:gsub("Window", "")
+        end
+        
+        window.library:_registerElement("colorpicker", tabName, windowName, text, api)
     end
 
     return api
@@ -2095,7 +2180,7 @@ function ModernUI:_createTextBox(window, text, placeholder, callback)
         callback(textBox.Text)
     end)
 
-    return {
+    local api = {
         SetValue = function(value)
             textBox.Text = value
         end,
@@ -2103,6 +2188,27 @@ function ModernUI:_createTextBox(window, text, placeholder, callback)
             return textBox.Text
         end
     }
+    
+    -- Element für Config System registrieren
+    if window and window.library then
+        local tabName = nil
+        local windowName = nil
+        
+        for _, tab in ipairs(window.library.tabs) do
+            if tab.frame and tab.frame:IsAncestorOf(window.frame) then
+                tabName = tab.frame.Name:gsub("Content", "")
+                break
+            end
+        end
+        
+        if window.frame and window.frame.Name then
+            windowName = window.frame.Name:gsub("Window", "")
+        end
+        
+        window.library:_registerElement("textbox", tabName, windowName, text or "TextInput", api)
+    end
+    
+    return api
 end
 
 function ModernUI:_createKeybind(window, text, default, callback)
@@ -2191,7 +2297,7 @@ function ModernUI:_createKeybind(window, text, default, callback)
         end)
     end)
 
-    return {
+    local api = {
         SetValue = function(key)
             currentKey = key
             button.Text = 'Bind: ' .. key
@@ -2200,6 +2306,27 @@ function ModernUI:_createKeybind(window, text, default, callback)
             return currentKey
         end
     }
+    
+    -- Element für Config System registrieren
+    if window and window.library then
+        local tabName = nil
+        local windowName = nil
+        
+        for _, tab in ipairs(window.library.tabs) do
+            if tab.frame and tab.frame:IsAncestorOf(window.frame) then
+                tabName = tab.frame.Name:gsub("Content", "")
+                break
+            end
+        end
+        
+        if window.frame and window.frame.Name then
+            windowName = window.frame.Name:gsub("Window", "")
+        end
+        
+        window.library:_registerElement("keybind", tabName, windowName, text, api)
+    end
+    
+    return api
 end
 
 -- Destroy GUI
@@ -2333,6 +2460,40 @@ function ModernUI:_addConfigManagement(configManager)
         end
         print("[Library] ConfigManager methods available: " .. table.concat(methods, ", "))
     end
+end
+
+-- Element Registry Functions für Config System
+function ModernUI:_registerElement(elementType, tabName, windowName, elementName, elementAPI)
+    self._elementCounter = self._elementCounter + 1
+    local elementId = "element_" .. self._elementCounter
+    
+    self._elementRegistry[elementId] = {
+        id = elementId,
+        type = elementType,
+        tabName = tabName or "Unknown",
+        windowName = windowName or "Unknown", 
+        elementName = elementName or "Unknown",
+        api = elementAPI,
+        path = tabName .. "." .. windowName .. "." .. elementName
+    }
+    
+    print("[Library] Registered element: " .. elementType .. " - " .. (tabName or "Unknown") .. "." .. (windowName or "Unknown") .. "." .. (elementName or "Unknown"))
+    
+    return elementId
+end
+
+function ModernUI:_getAllRegisteredElements()
+    return self._elementRegistry
+end
+
+function ModernUI:_getElementByPath(tabName, windowName, elementName)
+    local path = tabName .. "." .. windowName .. "." .. elementName
+    for _, element in pairs(self._elementRegistry) do
+        if element.path == path then
+            return element
+        end
+    end
+    return nil
 end
 
 return ModernUI
