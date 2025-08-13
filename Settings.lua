@@ -82,6 +82,8 @@ function SettingsTab.Build(ui, afterTab, deps)
             toggleKey = (ui:GetToggleKey() and ui:GetToggleKey().Name) or "RightShift",
         }
         ConfigSystem.Save(selectedConfig, data)
+        -- nach Speichern Dropdown-Liste aktualisieren, Auswahl beibehalten
+        task.defer(function() pcall(function() if configsDropdown then configsDropdown.SetOptions(ConfigSystem.List()) configsDropdown.SetValue(selectedConfig) end end) end)
     end)
 
     winCfg:CreateCheckbox("Auto Load Config", false, function(val)
