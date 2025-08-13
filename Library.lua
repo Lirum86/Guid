@@ -891,6 +891,7 @@ function ModernUI:_createMultiDropdown(window, text, options, defaults, callback
     local menuCorner = Instance.new('UICorner')
     menuCorner.CornerRadius = UDim.new(0, 4)
     menuCorner.Parent = menu
+    local isOpen = false
     -- Track open state early so option handlers close correctly
     local isOpen = false
 
@@ -1094,8 +1095,8 @@ function ModernUI:_createMultiDropdown(window, text, options, defaults, callback
     end
     function api.SetOptions(newOptions)
         for _, btn in pairs(optionButtons) do
-            if btn and btn.Parent and btn.Parent.Parent then
-                btn.Parent.Parent:Destroy()
+            if btn and btn.Parent then
+                btn.Parent:Destroy()
             end
         end
         optionButtons = {}
@@ -1124,7 +1125,6 @@ function ModernUI:_createMultiDropdown(window, text, options, defaults, callback
             optionButton.Parent = optionFrame
             optionButtons[tostring(option)] = optionButton
             table.insert(self._themeRefs.multiDropdownOptionButtons, optionButton)
-            table.insert(self._themeRefs.dropdownOptionButtons, optionButton)
 
             local optionCorner = Instance.new('UICorner')
             optionCorner.CornerRadius = UDim.new(0, 3)
@@ -1617,8 +1617,8 @@ function ModernUI:_createDropdown(window, text, options, default, callback)
 
     function api.SetOptions(newOptions)
         for _, btn in pairs(optionButtons) do
-            if btn and btn.Parent and btn.Parent.Parent then
-                btn.Parent.Parent:Destroy()
+            if btn and btn.Parent then
+                btn.Parent:Destroy()
             end
         end
         optionButtons = {}
