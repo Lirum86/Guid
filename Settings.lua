@@ -12,13 +12,32 @@ local function createTabAfter(ui, title, icon, afterTab)
 end
 
 function SettingsTab.Build(ui, afterTab, deps)
+    print("[SettingsTab] Building Settings Tab...")
+    
     -- Verwende neues ConfigManager System falls verfügbar, sonst Fallback
     local ConfigSystem = nil
     
     if ui._configManagerForSettings then
+        print("[SettingsTab] Using integrated ConfigManager from Library")
         ConfigSystem = ui._configManagerForSettings
     elseif deps and deps.ConfigSystem then
+        print("[SettingsTab] Using ConfigSystem from deps")
         ConfigSystem = deps.ConfigSystem
+    else
+        print("[SettingsTab] No ConfigSystem available!")
+    end
+    
+    if ConfigSystem then
+        print("[SettingsTab] ConfigSystem type: " .. type(ConfigSystem))
+        if type(ConfigSystem) == "table" then
+            local methods = {}
+            for k, v in pairs(ConfigSystem) do
+                if type(v) == "function" then
+                    table.insert(methods, k)
+                end
+            end
+            print("[SettingsTab] Available methods: " .. table.concat(methods, ", "))
+        end
     end
     local tab = createTabAfter(ui, "Settings", "⚙️", afterTab)
 
@@ -63,18 +82,34 @@ function SettingsTab.Build(ui, afterTab, deps)
     end
 
     local createBtn = winCfg:CreateButton("Create Config", function()
-        if ConfigSystem then
-            if cfgName == nil or cfgName == '' then return end
-            
-            if ConfigSystem.createConfig then
-                -- Neues ConfigManager System
-                ConfigSystem:createConfig(cfgName)
-            elseif ConfigSystem.Create then
-                -- Altes ConfigSystem
-                ConfigSystem.Create(cfgName)
-            end
-            
-            task.defer(function() refreshDropdown(cfgName) end)
+        if not ConfigSystem then 
+            print("[SettingsTab] No ConfigSystem available")
+            return 
+        end
+        
+        if cfgName == nil or cfgName == '' then 
+            print("[SettingsTab] Config name is empty")
+            return 
+        end
+        
+        print("[SettingsTab] Creating config: " .. cfgName)
+        
+        local success = false
+        if ConfigSystem.createConfig then
+            -- Neues ConfigManager System
+            success = ConfigSystem:createConfig(cfgName)
+        elseif ConfigSystem.Create then
+            -- Altes ConfigSystem
+            success = ConfigSystem.Create(cfgName)
+        end
+        
+        if success then
+            task.defer(function() 
+                refreshDropdown(cfgName) 
+                -- Config Name Input leeren
+                configNameBox.SetValue("")
+                cfgName = ""
+            end)
         end
     end)
 
@@ -103,39 +138,67 @@ function SettingsTab.Build(ui, afterTab, deps)
     end
 
     local loadBtn = winCfg:CreateButton("Load", function()
-        if not (ConfigSystem and selectedConfig) then return end
+        if not ConfigSystem then 
+            print("[SettingsTab] No ConfigSystem available")
+            return 
+        end
         
+        if not selectedConfig then 
+            print("[SettingsTab] No config selected")
+            return 
+        end
+        
+        print("[SettingsTab] Loading config: " .. selectedConfig)
+        
+        local success = false
         if ConfigSystem.loadConfig then
             -- Neues ConfigManager System
-            ConfigSystem:loadConfig(selectedConfig)
+            success = ConfigSystem:loadConfig(selectedConfig)
         elseif ConfigSystem.Load then
             -- Altes ConfigSystem - Legacy-Verhalten
             local data = ConfigSystem.Load(selectedConfig)
-            if type(data) ~= 'table' then return end
-            if data.primary then ui:SetTheme({ primary = tblToColor(data.primary) }) end
-            if data.watermark ~= nil then ui:SetWatermarkVisible(data.watermark and true or false) end
-            if data.toggleKey then ui:SetToggleKey(data.toggleKey) end
-            -- apply external control states
-            if type(data.controls) == 'table' then
-                for key, value in pairs(data.controls) do
-                    local control = externalBindings[key]
-                    if control and type(control) == 'table' and type(control.SetValue) == 'function' then
-                        -- color tables back to Color3
-                        if type(value) == 'table' and value.__type == 'color' then
-                            value = Color3.fromRGB(tonumber(value.r) or 110, tonumber(value.g) or 117, tonumber(value.b) or 243)
+            if type(data) == 'table' then
+                if data.primary then ui:SetTheme({ primary = tblToColor(data.primary) }) end
+                if data.watermark ~= nil then ui:SetWatermarkVisible(data.watermark and true or false) end
+                if data.toggleKey then ui:SetToggleKey(data.toggleKey) end
+                -- apply external control states
+                if type(data.controls) == 'table' then
+                    for key, value in pairs(data.controls) do
+                        local control = externalBindings[key]
+                        if control and type(control) == 'table' and type(control.SetValue) == 'function' then
+                            -- color tables back to Color3
+                            if type(value) == 'table' and value.__type == 'color' then
+                                value = Color3.fromRGB(tonumber(value.r) or 110, tonumber(value.g) or 117, tonumber(value.b) or 243)
+                            end
+                            pcall(function() control.SetValue(value) end)
                         end
-                        pcall(function() control.SetValue(value) end)
                     end
                 end
+                success = true
             end
+        end
+        
+        if not success then
+            print("[SettingsTab] Failed to load config: " .. selectedConfig)
         end
     end)
     local saveBtn = winCfg:CreateButton("Save", function()
-        if not (ConfigSystem and selectedConfig) then return end
+        if not ConfigSystem then 
+            print("[SettingsTab] No ConfigSystem available")
+            return 
+        end
         
+        if not selectedConfig then 
+            print("[SettingsTab] No config selected")
+            return 
+        end
+        
+        print("[SettingsTab] Saving config: " .. selectedConfig)
+        
+        local success = false
         if ConfigSystem.saveConfig then
             -- Neues ConfigManager System - automatische Datensammlung
-            ConfigSystem:saveConfig(selectedConfig)
+            success = ConfigSystem:saveConfig(selectedConfig)
         elseif ConfigSystem.Save then
             -- Altes ConfigSystem - manuelle Datensammlung
             local theme = ui.options and ui.options.theme or { primary = Color3.fromRGB(110,117,243) }
@@ -160,26 +223,46 @@ function SettingsTab.Build(ui, afterTab, deps)
             end
             data.controls = controls
             local ok, err = ConfigSystem.Save(selectedConfig, data)
-            if not ok then warn("Config save failed: ", err) end
+            success = ok
+            if not ok then 
+                print("[SettingsTab] Config save failed: " .. tostring(err))
+            end
         end
         
-        -- nach Speichern Dropdown-Liste aktualisieren, Auswahl beibehalten
-        task.defer(function() refreshDropdown(selectedConfig) end)
+        if success then
+            -- nach Speichern Dropdown-Liste aktualisieren, Auswahl beibehalten
+            task.defer(function() refreshDropdown(selectedConfig) end)
+        end
     end)
 
     local deleteBtn = winCfg:CreateButton("Delete", function()
-        if not (ConfigSystem and selectedConfig) then return end
-        
-        local ok = false
-        if ConfigSystem.deleteConfig then
-            -- Neues ConfigManager System
-            ok = ConfigSystem:deleteConfig(selectedConfig)
-        elseif ConfigSystem.Delete then
-            -- Altes ConfigSystem
-            ok = ConfigSystem.Delete(selectedConfig)
+        if not ConfigSystem then 
+            print("[SettingsTab] No ConfigSystem available")
+            return 
         end
         
-        if ok then
+        if not selectedConfig then 
+            print("[SettingsTab] No config selected")
+            return 
+        end
+        
+        if selectedConfig == "default" or selectedConfig == "Default" then
+            print("[SettingsTab] Cannot delete default config")
+            return
+        end
+        
+        print("[SettingsTab] Deleting config: " .. selectedConfig)
+        
+        local success = false
+        if ConfigSystem.deleteConfig then
+            -- Neues ConfigManager System
+            success = ConfigSystem:deleteConfig(selectedConfig)
+        elseif ConfigSystem.Delete then
+            -- Altes ConfigSystem
+            success = ConfigSystem.Delete(selectedConfig)
+        end
+        
+        if success then
             selectedConfig = nil
             task.defer(function()
                 local list = {"Default"}
@@ -195,6 +278,8 @@ function SettingsTab.Build(ui, afterTab, deps)
                     selectedConfig = list[1]
                 end
             end)
+        else
+            print("[SettingsTab] Failed to delete config: " .. selectedConfig)
         end
     end)
 
