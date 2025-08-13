@@ -1,6 +1,6 @@
--- ConfigSystem.lua
--- Erweiterte Konfigurationsverwaltung für ModernUI
--- Unterstützt: Speichern/Laden, Auto-Load, JSON-ähnliche Serialisierung, Fehlerbehandlung
+-- ConfigSystem.lua (Executor Version)
+-- Config-System für Roblox Executors (kein Studio)
+-- Verwendet writefile/readfile statt ReplicatedStorage
 
 local ConfigSystem = {}
 
@@ -10,29 +10,34 @@ local HttpService = game:GetService('HttpService')
 
 local player = Players.LocalPlayer
 
+-- Executor File System Check
+local hasFileSystem = (writefile and readfile and isfolder and makefolder and delfile and listfiles)
+
 -- Interner State
 local configs = {}
 local autoLoadConfig = nil
-local dataFolder = nil
+local configFolder = "ModernUI_Configs"
 
 -- Initialisierung
 local function init()
-    if dataFolder then return end
+    if not hasFileSystem then
+        warn("❌ CRITICAL: Executor doesn't support file system! Config system disabled.")
+        return false
+    end
     
-    -- DataStore Folder erstellen
-    dataFolder = Instance.new('Folder')
-    dataFolder.Name = 'ModernUI_Configs'
-    dataFolder.Parent = player
+    -- Config Folder erstellen falls nicht existent
+    if not isfolder(configFolder) then
+        makefolder(configFolder)
+        print("📁 Created config folder: " .. configFolder)
+    end
     
     -- Lade existierende Configs
-    ConfigSystem._loadFromDataStore()
+    ConfigSystem._loadConfigs()
     
     -- Auto-Load Einstellung laden
-    local autoLoadValue = dataFolder:FindFirstChild('AutoLoad')
-    if autoLoadValue and autoLoadValue:IsA('StringValue') then
-        autoLoadConfig = autoLoadValue.Value
-        if autoLoadConfig == '' then autoLoadConfig = nil end
-    end
+    ConfigSystem._loadAutoLoad()
+    
+    return true
 end
 
 -- Private Hilfsfunktionen
@@ -137,54 +142,104 @@ function ConfigSystem._deserializeValue(value)
     end
 end
 
-function ConfigSystem._saveToDataStore()
-    -- Speichere alle Configs als StringValues in DataStore Folder
-    for name, data in pairs(configs) do
-        local stringValue = dataFolder:FindFirstChild(name)
-        if not stringValue then
-            stringValue = Instance.new('StringValue')
-            stringValue.Name = name
-            stringValue.Parent = dataFolder
-        end
-        
-        local success, serialized = pcall(function()
-            return HttpService:JSONEncode(data)
-        end)
-        
-        if success then
-            stringValue.Value = serialized
-        else
-            warn("ConfigSystem: Fehler beim Serialisieren von Config '" .. name .. "': " .. tostring(serialized))
-        end
-    end
-    
-    -- Auto-Load Einstellung speichern
-    local autoLoadValue = dataFolder:FindFirstChild('AutoLoad')
-    if not autoLoadValue then
-        autoLoadValue = Instance.new('StringValue')
-        autoLoadValue.Name = 'AutoLoad'
-        autoLoadValue.Parent = dataFolder
-    end
-    autoLoadValue.Value = autoLoadConfig or ''
+function ConfigSystem._getConfigPath(name)
+    return configFolder .. "/" .. name .. ".json"
 end
 
-function ConfigSystem._loadFromDataStore()
-    if not dataFolder then return end
+function ConfigSystem._loadConfigs()
+    if not hasFileSystem then return end
     
     configs = {}
     
-    for _, child in ipairs(dataFolder:GetChildren()) do
-        if child:IsA('StringValue') and child.Name ~= 'AutoLoad' then
-            local success, data = pcall(function()
-                return HttpService:JSONDecode(child.Value)
-            end)
-            
-            if success and type(data) == "table" then
-                configs[child.Name] = data
-            else
-                warn("ConfigSystem: Fehler beim Laden von Config '" .. child.Name .. "'")
+    local success, files = pcall(function()
+        return listfiles(configFolder)
+    end)
+    
+    if not success then
+        warn("ConfigSystem: Fehler beim Laden der Config-Liste")
+        return
+    end
+    
+    for _, filePath in ipairs(files) do
+        if filePath:match("%.json$") then
+            local fileName = filePath:match("([^/\\]+)%.json$")
+            if fileName then
+                local readSuccess, content = pcall(function()
+                    return readfile(filePath)
+                end)
+                
+                if readSuccess and content then
+                    local parseSuccess, data = pcall(function()
+                        return HttpService:JSONDecode(content)
+                    end)
+                    
+                    if parseSuccess and type(data) == "table" then
+                        configs[fileName] = data
+                        print("📂 Loaded config: " .. fileName)
+                    else
+                        warn("ConfigSystem: Fehler beim Parsen von " .. fileName)
+                    end
+                end
             end
         end
+    end
+end
+
+function ConfigSystem._saveConfig(name, data)
+    if not hasFileSystem then return false end
+    
+    local filePath = ConfigSystem._getConfigPath(name)
+    
+    local success, serialized = pcall(function()
+        return HttpService:JSONEncode(data)
+    end)
+    
+    if not success then
+        warn("ConfigSystem: Fehler beim Serialisieren von " .. name)
+        return false
+    end
+    
+    local writeSuccess = pcall(function()
+        writefile(filePath, serialized)
+    end)
+    
+    if writeSuccess then
+        print("💾 Config gespeichert: " .. filePath)
+        return true
+    else
+        warn("ConfigSystem: Fehler beim Schreiben von " .. name)
+        return false
+    end
+end
+
+function ConfigSystem._loadAutoLoad()
+    if not hasFileSystem then return end
+    
+    local autoLoadPath = configFolder .. "/autoload.txt"
+    
+    local success, content = pcall(function()
+        return readfile(autoLoadPath)
+    end)
+    
+    if success and content and content ~= "" then
+        autoLoadConfig = content:gsub("%s+", "") -- Remove whitespace
+        print("🔄 Auto-load config: " .. autoLoadConfig)
+    end
+end
+
+function ConfigSystem._saveAutoLoad()
+    if not hasFileSystem then return end
+    
+    local autoLoadPath = configFolder .. "/autoload.txt"
+    
+    local success = pcall(function()
+        writefile(autoLoadPath, autoLoadConfig or "")
+    end)
+    
+    if success then
+        print("💾 Auto-load setting saved")
+    else
+        warn("ConfigSystem: Fehler beim Speichern der Auto-Load Einstellung")
     end
 end
 
@@ -210,7 +265,7 @@ end
 
 -- Öffentliche API
 function ConfigSystem.Create(name)
-    init()
+    if not init() then return false end
     
     local valid, error = ConfigSystem._validateConfigName(name)
     if not valid then
@@ -218,19 +273,21 @@ function ConfigSystem.Create(name)
         return false
     end
     
-    configs[name] = {
+    local configData = {
         _metadata = {
             created = os.time(),
-            version = "1.0"
+            version = "1.0",
+            executor = true
         }
     }
     
-    ConfigSystem._saveToDataStore()
-    return true
+    configs[name] = configData
+    
+    return ConfigSystem._saveConfig(name, configData)
 end
 
 function ConfigSystem.Delete(name)
-    init()
+    if not init() then return false end
     
     if not configs[name] then
         warn("ConfigSystem.Delete: Config '" .. name .. "' existiert nicht")
@@ -239,23 +296,29 @@ function ConfigSystem.Delete(name)
     
     configs[name] = nil
     
-    -- Entferne aus DataStore
-    local stringValue = dataFolder:FindFirstChild(name)
-    if stringValue then
-        stringValue:Destroy()
+    -- Lösche Datei
+    local filePath = ConfigSystem._getConfigPath(name)
+    local success = pcall(function()
+        delfile(filePath)
+    end)
+    
+    if success then
+        print("🗑️ Config gelöscht: " .. name)
+    else
+        warn("ConfigSystem.Delete: Fehler beim Löschen der Datei")
     end
     
     -- Auto-Load zurücksetzen falls gelöscht
     if autoLoadConfig == name then
         autoLoadConfig = nil
-        ConfigSystem._saveToDataStore()
+        ConfigSystem._saveAutoLoad()
     end
     
-    return true
+    return success
 end
 
 function ConfigSystem.Save(name, data)
-    init()
+    if not init() then return false end
     
     local valid, error = ConfigSystem._validateConfigName(name)
     if not valid then
@@ -276,25 +339,27 @@ function ConfigSystem.Save(name, data)
     -- Serialisiere und speichere
     local serializedData = ConfigSystem._serializeValue(data)
     
-    configs[name] = {
+    local configData = {
         _metadata = {
             created = configs[name]._metadata and configs[name]._metadata.created or os.time(),
             modified = os.time(),
-            version = "1.0"
+            version = "1.0",
+            executor = true
         }
     }
     
     -- Merge Daten
     for k, v in pairs(serializedData) do
-        configs[name][k] = v
+        configData[k] = v
     end
     
-    ConfigSystem._saveToDataStore()
-    return true
+    configs[name] = configData
+    
+    return ConfigSystem._saveConfig(name, configData)
 end
 
 function ConfigSystem.Load(name)
-    init()
+    if not init() then return nil end
     
     if not configs[name] then
         warn("ConfigSystem.Load: Config '" .. name .. "' existiert nicht")
@@ -312,7 +377,7 @@ function ConfigSystem.Load(name)
 end
 
 function ConfigSystem.List()
-    init()
+    if not init() then return {"Default"} end
     
     local list = {}
     for name, _ in pairs(configs) do
@@ -320,16 +385,25 @@ function ConfigSystem.List()
     end
     
     table.sort(list)
+    
+    -- Stelle sicher dass Default immer existiert
+    if #list == 0 or not ConfigSystem.Exists("Default") then
+        ConfigSystem.Create("Default")
+        if not table.find(list, "Default") then
+            table.insert(list, "Default")
+        end
+    end
+    
     return list
 end
 
 function ConfigSystem.Exists(name)
-    init()
+    if not init() then return false end
     return configs[name] ~= nil
 end
 
 function ConfigSystem.GetInfo(name)
-    init()
+    if not init() then return nil end
     
     if not configs[name] then
         return nil
@@ -338,91 +412,8 @@ function ConfigSystem.GetInfo(name)
     return configs[name]._metadata
 end
 
-function ConfigSystem.Rename(oldName, newName)
-    init()
-    
-    if not configs[oldName] then
-        warn("ConfigSystem.Rename: Config '" .. oldName .. "' existiert nicht")
-        return false
-    end
-    
-    local valid, error = ConfigSystem._validateConfigName(newName)
-    if not valid then
-        warn("ConfigSystem.Rename: " .. error)
-        return false
-    end
-    
-    if configs[newName] then
-        warn("ConfigSystem.Rename: Config '" .. newName .. "' existiert bereits")
-        return false
-    end
-    
-    -- Kopiere Daten
-    configs[newName] = configs[oldName]
-    configs[oldName] = nil
-    
-    -- Update Auto-Load falls betroffen
-    if autoLoadConfig == oldName then
-        autoLoadConfig = newName
-    end
-    
-    -- Update DataStore
-    local oldStringValue = dataFolder:FindFirstChild(oldName)
-    if oldStringValue then
-        oldStringValue:Destroy()
-    end
-    
-    ConfigSystem._saveToDataStore()
-    return true
-end
-
-function ConfigSystem.Copy(sourceName, targetName)
-    init()
-    
-    if not configs[sourceName] then
-        warn("ConfigSystem.Copy: Quell-Config '" .. sourceName .. "' existiert nicht")
-        return false
-    end
-    
-    local valid, error = ConfigSystem._validateConfigName(targetName)
-    if not valid then
-        warn("ConfigSystem.Copy: " .. error)
-        return false
-    end
-    
-    if configs[targetName] then
-        warn("ConfigSystem.Copy: Ziel-Config '" .. targetName .. "' existiert bereits")
-        return false
-    end
-    
-    -- Deep Copy der Config-Daten
-    local function deepCopy(original)
-        local copy = {}
-        for k, v in pairs(original) do
-            if type(v) == "table" then
-                copy[k] = deepCopy(v)
-            else
-                copy[k] = v
-            end
-        end
-        return copy
-    end
-    
-    configs[targetName] = deepCopy(configs[sourceName])
-    
-    -- Update Metadaten
-    configs[targetName]._metadata = {
-        created = os.time(),
-        version = "1.0",
-        copiedFrom = sourceName
-    }
-    
-    ConfigSystem._saveToDataStore()
-    return true
-end
-
 function ConfigSystem.SetAutoLoad(configName)
-    init()
+    if not init() then return false end
     
     if configName ~= nil and not configs[configName] then
         warn("ConfigSystem.SetAutoLoad: Config '" .. configName .. "' existiert nicht")
@@ -430,17 +421,17 @@ function ConfigSystem.SetAutoLoad(configName)
     end
     
     autoLoadConfig = configName
-    ConfigSystem._saveToDataStore()
+    ConfigSystem._saveAutoLoad()
     return true
 end
 
 function ConfigSystem.GetAutoLoad()
-    init()
+    if not init() then return nil end
     return autoLoadConfig
 end
 
 function ConfigSystem.Export(name)
-    init()
+    if not init() then return nil end
     
     local configData = ConfigSystem.Load(name)
     if not configData then
@@ -451,6 +442,7 @@ function ConfigSystem.Export(name)
         name = name,
         exported = os.time(),
         version = "1.0",
+        executor = true,
         data = configData
     }
     
@@ -462,7 +454,7 @@ function ConfigSystem.Export(name)
 end
 
 function ConfigSystem.Import(encodedData, targetName)
-    init()
+    if not init() then return false end
     
     local success, importData = pcall(function()
         return HttpService:JSONDecode(encodedData)
@@ -489,9 +481,10 @@ end
 
 -- Auto-Load beim Laden des Scripts
 function ConfigSystem.AutoLoad()
-    init()
+    if not init() then return nil end
     
     if autoLoadConfig and configs[autoLoadConfig] then
+        print("🔄 Auto-loading config: " .. autoLoadConfig)
         return ConfigSystem.Load(autoLoadConfig)
     end
     
@@ -502,13 +495,18 @@ end
 function ConfigSystem.Cleanup()
     configs = {}
     autoLoadConfig = nil
-    if dataFolder then
-        dataFolder:Destroy()
-        dataFolder = nil
-    end
 end
 
--- Initialisiere beim ersten Aufruf
-init()
+-- Erstelle Default Config beim ersten Laden
+if hasFileSystem then
+    task.spawn(function()
+        task.wait(1) -- Warte bis alles geladen ist
+        init()
+        if not ConfigSystem.Exists("Default") then
+            ConfigSystem.Create("Default")
+            print("✅ Default config created for executor")
+        end
+    end)
+end
 
 return ConfigSystem
