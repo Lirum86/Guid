@@ -2270,32 +2270,49 @@ end
 function ModernUI:_setupConfigManagerIntegration()
     -- Automatisches Laden des Config Systems
     task.spawn(function()
+        print("[Library] Starting ConfigManager integration...")
         task.wait(2) -- Warten bis GUI vollständig initialisiert ist
         
         local success = pcall(function()
             -- Versuche Config System zu laden
             local ConfigManager = nil
             
+            print("[Library] Attempting to load local ConfigSystem...")
             -- Lokales ConfigSystem bevorzugen
             local ok, module = pcall(function()
                 return require(script.Parent:WaitForChild("ConfigSystem"))
             end)
             
             if ok and module then
+                print("[Library] Local ConfigSystem loaded successfully")
                 ConfigManager = module
             else
+                print("[Library] Local ConfigSystem failed, trying GitHub fallback...")
                 -- Fallback zu GitHub
-                ConfigManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/Lirum86/Guid/refs/heads/main/Config.lua"))()
+                local success, result = pcall(function()
+                    return loadstring(game:HttpGet("https://raw.githubusercontent.com/Lirum86/Guid/refs/heads/main/Config.lua"))()
+                end)
+                
+                if success and result then
+                    print("[Library] GitHub ConfigSystem loaded successfully")
+                    ConfigManager = result
+                else
+                    print("[Library] GitHub ConfigSystem failed")
+                end
             end
             
             if ConfigManager then
+                print("[Library] Creating ConfigManager instance...")
                 self.configManager = ConfigManager.new(self)
                 self:_addConfigManagement(self.configManager)
+                print("[Library] ConfigManager integration complete")
+            else
+                print("[Library] No ConfigManager available")
             end
         end)
         
         if not success then
-            warn("ConfigManager integration failed")
+            warn("[Library] ConfigManager integration failed")
         end
     end)
 end
@@ -2304,6 +2321,18 @@ end
 function ModernUI:_addConfigManagement(configManager)
     -- Stelle ConfigManager für SettingsTab zur Verfügung
     self._configManagerForSettings = configManager
+    print("[Library] ConfigManager stored for SettingsTab integration")
+    
+    -- Debug: ConfigManager verfügbare Methoden anzeigen
+    if configManager then
+        local methods = {}
+        for k, v in pairs(configManager) do
+            if type(v) == "function" then
+                table.insert(methods, k)
+            end
+        end
+        print("[Library] ConfigManager methods available: " .. table.concat(methods, ", "))
+    end
 end
 
 return ModernUI
