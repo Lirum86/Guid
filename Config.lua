@@ -171,6 +171,40 @@ function ConfigSystem.Load(name)
     end
 end
 
+-- Delete a config (executor-safe)
+function ConfigSystem.Delete(name)
+    name = sanitize(name)
+    if not name then return false, "invalid name" end
+    ensureDir()
+    -- update list/index
+    local list = ConfigSystem.List()
+    local idx = table.find(list, name)
+    if idx then table.remove(list, idx) end
+    writeIndex(list)
+    -- delete file if possible
+    if hasFs() then
+        local path = BASE_DIR .. "/" .. name .. ".json"
+        pcall(function()
+            if typeof(delfile) == "function" and isfile(path) then
+                delfile(path)
+            elseif isfile(path) then
+                -- fallback: overwrite with empty JSON if deletion not available
+                writefile(path, "{}")
+            end
+        end)
+    else
+        memoryStore.data[name] = nil
+    end
+    -- clear autoLoad if it pointed to this config
+    local meta = readMeta()
+    if meta and meta.autoLoad == name then
+        meta.autoLoad = nil
+        writeMeta(meta)
+    end
+    notify()
+    return true
+end
+
 -- Auto-load flag stored in meta
 local function readMeta()
     if hasFs() and isfile(META_FILE) then
