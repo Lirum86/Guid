@@ -43,17 +43,17 @@ function SettingsTab.Build(ui, afterTab, deps)
         if choose and configsDropdown.SetValue then pcall(function() configsDropdown.SetValue(choose) end) end
     end
 
-    local selectedConfig = nil
-    configsDropdown = winCfg:CreateDropdown("Configs", (ConfigSystem and ConfigSystem.List()) or {"Default"}, "Default", function(val)
-        selectedConfig = val
-    end)
-
     local createBtn = winCfg:CreateButton("Create Config", function()
         if ConfigSystem then
             if cfgName == nil or cfgName == '' then return end
             ConfigSystem.Create(cfgName)
             task.defer(function() refreshDropdown(cfgName) end)
         end
+    end)
+
+    local selectedConfig = nil
+    configsDropdown = winCfg:CreateDropdown("Configs", (ConfigSystem and ConfigSystem.List()) or {"Default"}, "Default", function(val)
+        selectedConfig = val
     end)
 
     local function colorToTbl(c)
