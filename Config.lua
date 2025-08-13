@@ -12,7 +12,10 @@ local function hasFs()
         and typeof(readfile) == "function"
         and typeof(makefolder) == "function"
         and typeof(isfolder) == "function"
-        and typeof(listfiles) == "function"
+end
+
+local function canListFs()
+    return typeof(listfiles) == "function"
 end
 
 local BASE_DIR = "workspace/LynixConfigs"
@@ -20,11 +23,16 @@ local INDEX_FILE = BASE_DIR .. "/_index.json"
 local META_FILE = BASE_DIR .. "/_meta.json"
 
 local function ensureDir()
-    if hasFs() then
-        pcall(function()
-            if not isfolder(BASE_DIR) then makefolder(BASE_DIR) end
-        end)
-    end
+    if not hasFs() then return end
+    pcall(function()
+        -- ensure parent workspace exists first (executor compatibility)
+        if not isfolder("workspace") then
+            makefolder("workspace")
+        end
+        if not isfolder(BASE_DIR) then
+            makefolder(BASE_DIR)
+        end
+    end)
 end
 
 local function jsonEncode(t)
@@ -49,9 +57,10 @@ local function readIndex()
     -- Build from directory if index missing
     local names = {}
     local ok, files = pcall(function() return listfiles(BASE_DIR) end)
-    if ok and type(files) == "table" then
+    if canListFs() and ok and type(files) == "table" then
         for _, path in ipairs(files) do
-            local name = path:match(".*/(.+)%.json$")
+            -- support both forward and backslashes
+            local name = path:match("[/\\]([^/\\]+)%.json$")
             if name and name ~= "_index" and name ~= "_meta" then table.insert(names, name) end
         end
     end
@@ -63,7 +72,7 @@ end
 local function writeIndex(list)
     if hasFs() then
         ensureDir()
-        writefile(INDEX_FILE, jsonEncode(list))
+        writefile(INDEX_FILE, jsonEncode(list or {}))
     else
         memoryStore.list = list
     end
@@ -128,7 +137,10 @@ function ConfigSystem.Save(name, data)
     data = data or {}
     if hasFs() then
         local path = BASE_DIR .. "/" .. name .. ".json"
-        writefile(path, jsonEncode(data))
+        -- atomic-ish write: write to tmp then replace
+        local tmp = path .. ".tmp"
+        writefile(tmp, jsonEncode(data))
+        writefile(path, readfile(tmp))
     else
         memoryStore.data[name] = data
     end
@@ -143,7 +155,8 @@ function ConfigSystem.Load(name)
     if hasFs() then
         local path = BASE_DIR .. "/" .. name .. ".json"
         if not isfile(path) then return {} end
-        local t = jsonDecode(readfile(path))
+        local raw = readfile(path)
+        local t = jsonDecode(raw)
         return (type(t) == "table") and t or {}
     else
         return memoryStore.data[name] or {}
