@@ -81,7 +81,8 @@ function SettingsTab.Build(ui, afterTab, deps)
             watermark = (ui._watermarkVisible ~= false),
             toggleKey = (ui:GetToggleKey() and ui:GetToggleKey().Name) or "RightShift",
         }
-        ConfigSystem.Save(selectedConfig, data)
+        local ok, err = ConfigSystem.Save(selectedConfig, data)
+        if not ok then warn("Config save failed: ", err) end
         -- nach Speichern Dropdown-Liste aktualisieren, Auswahl beibehalten
         task.defer(function() pcall(function() if configsDropdown then configsDropdown.SetOptions(ConfigSystem.List()) configsDropdown.SetValue(selectedConfig) end end) end)
     end)
