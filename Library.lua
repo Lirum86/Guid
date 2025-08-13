@@ -60,6 +60,10 @@ function ModernUI.new(options)
     self:_setupToggleKeyListener()
     self:_createWatermark()
     
+    -- Config Manager Integration
+    self.configManager = nil
+    self:_setupConfigManagerIntegration()
+    
     return self
 end
 
@@ -2260,6 +2264,46 @@ function ModernUI:SetTheme(theme)
     end
     -- Update tabs immediately
     self:_applyTabThemeColors()
+end
+
+-- Config Manager Integration Setup
+function ModernUI:_setupConfigManagerIntegration()
+    -- Automatisches Laden des Config Systems
+    task.spawn(function()
+        task.wait(2) -- Warten bis GUI vollständig initialisiert ist
+        
+        local success = pcall(function()
+            -- Versuche Config System zu laden
+            local ConfigManager = nil
+            
+            -- Lokales ConfigSystem bevorzugen
+            local ok, module = pcall(function()
+                return require(script.Parent:WaitForChild("ConfigSystem"))
+            end)
+            
+            if ok and module then
+                ConfigManager = module
+            else
+                -- Fallback zu GitHub
+                ConfigManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/Lirum86/Guid/refs/heads/main/Config.lua"))()
+            end
+            
+            if ConfigManager then
+                self.configManager = ConfigManager.new(self)
+                self:_addConfigManagement(self.configManager)
+            end
+        end)
+        
+        if not success then
+            warn("ConfigManager integration failed")
+        end
+    end)
+end
+
+-- Config Management zur bestehenden Settings Tab Integration
+function ModernUI:_addConfigManagement(configManager)
+    -- Stelle ConfigManager für SettingsTab zur Verfügung
+    self._configManagerForSettings = configManager
 end
 
 return ModernUI
