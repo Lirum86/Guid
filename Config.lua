@@ -19,6 +19,13 @@ local function canListFs()
 end
 
 local BASE_DIR = "workspace/LynixConfigs"
+-- Allow overriding base directory for executors with restricted paths
+if typeof(getgenv) == "function" then
+    local g = getgenv()
+    if type(g) == "table" and type(g.LynixConfigBase) == "string" and #g.LynixConfigBase > 0 then
+        BASE_DIR = g.LynixConfigBase
+    end
+end
 local INDEX_FILE = BASE_DIR .. "/_index.json"
 local META_FILE = BASE_DIR .. "/_meta.json"
 
@@ -36,7 +43,8 @@ local function ensureDir()
 end
 
 local function jsonEncode(t)
-    return HttpService:JSONEncode(t or {})
+    local ok, s = pcall(function() return HttpService:JSONEncode(t or {}) end)
+    return ok and s or "{}"
 end
 local function jsonDecode(s)
     local ok, res = pcall(function() return HttpService:JSONDecode(s) end)
@@ -137,10 +145,10 @@ function ConfigSystem.Save(name, data)
     data = data or {}
     if hasFs() then
         local path = BASE_DIR .. "/" .. name .. ".json"
-        -- atomic-ish write: write to tmp then replace
-        local tmp = path .. ".tmp"
-        writefile(tmp, jsonEncode(data))
-        writefile(path, readfile(tmp))
+        local payload = jsonEncode(data) or "{}"
+        -- some executors return nil from immediate readfile on a freshly written temp file
+        -- keep it simple and write directly
+        writefile(path, payload)
     else
         memoryStore.data[name] = data
     end
