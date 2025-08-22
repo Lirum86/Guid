@@ -570,8 +570,11 @@ function ConfigManager:deleteConfig(configName)
     
     if success then
         -- AutoLoad zur\u00fccksetzen falls gel\u00f6schte Config
-        if self.autoLoadConfig == configName then
+        local currentAutoLoad = self:getAutoLoad()
+        if currentAutoLoad == configName then
+            print("[ConfigManager] Deleted config was AutoLoad config, clearing AutoLoad setting")
             self:setAutoLoad(nil)
+            self.autoLoadConfig = nil
         end
         
         self:safeNotify('success', 'Config Deleted', 'Configuration "' .. configName .. '" deleted successfully!', 3)
