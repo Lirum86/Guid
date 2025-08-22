@@ -1178,6 +1178,25 @@ function ModernUI:_createMultiDropdown(window, text, options, defaults, callback
         button.Text = computeButtonText()
     end
 
+    -- Element für Config System registrieren
+    if window and window.library then
+        local tabName = nil
+        local windowName = nil
+        
+        for _, tab in ipairs(window.library.tabs) do
+            if tab.frame and tab.frame:IsAncestorOf(window.frame) then
+                tabName = tab.frame.Name:gsub("Content", "")
+                break
+            end
+        end
+        
+        if window.frame and window.frame.Name then
+            windowName = window.frame.Name:gsub("Window", "")
+        end
+        
+        window.library:_registerElement("multidropdown", tabName, windowName, text, api)
+    end
+
     return api
 end
 
@@ -1373,11 +1392,38 @@ function ModernUI:_createButton(window, text, callback)
         callback()
     end)
 
-    return {
+    local api = {
         SetText = function(newText)
+            button.Text = newText
+        end,
+        GetValue = function()
+            return button.Text
+        end,
+        SetValue = function(newText)
             button.Text = newText
         end
     }
+    
+    -- Element für Config System registrieren
+    if window and window.library then
+        local tabName = nil
+        local windowName = nil
+        
+        for _, tab in ipairs(window.library.tabs) do
+            if tab.frame and tab.frame:IsAncestorOf(window.frame) then
+                tabName = tab.frame.Name:gsub("Content", "")
+                break
+            end
+        end
+        
+        if window.frame and window.frame.Name then
+            windowName = window.frame.Name:gsub("Window", "")
+        end
+        
+        window.library:_registerElement("button", tabName, windowName, text, api)
+    end
+    
+    return api
 end
 
 -- Simple implementations für andere UI Elemente
