@@ -151,6 +151,10 @@ function ConfigManager:delayedInitialize()
                     self.isInitialized = true
                     self:safeNotify('success', 'Config System', 'Ready! (FS: ' .. (self.hasFileSystem and 'Yes' or 'Memory') .. ')', 3)
                     
+                    -- Debug: Alle registrierten Elemente anzeigen
+                    task.wait(1)
+                    self:printAllRegisteredElements()
+                    
                     -- AutoLoad nach erfolgreicher Initialisierung
                     task.wait(0.5)
                     self:checkAutoLoad()
@@ -273,6 +277,7 @@ function ConfigManager:gatherAllSettings()
             watermarkVisible = true,
             themeColor = {r = 110, g = 117, b = 243}
         },
+        elements = {},
         tabs = {}
     }
     
@@ -309,7 +314,64 @@ function ConfigManager:gatherAllSettings()
         end
     end)
     
+    -- Alle registrierten UI-Elemente sammeln (neue Methode)
+    self:gatherRegisteredElements(settings)
+    
     return settings
+end
+
+-- Sammle alle registrierten UI-Elemente
+function ConfigManager:gatherRegisteredElements(settings)
+    if self.hubInstance._getAllRegisteredElements then
+        local elements = self.hubInstance:_getAllRegisteredElements()
+        local elementCount = 0
+        for _ in pairs(elements or {}) do elementCount = elementCount + 1 end
+        print("[ConfigManager] Found " .. elementCount .. " registered elements")
+        
+        for elementId, element in pairs(elements or {}) do
+            local success, value = pcall(function()
+                if element.api and element.api.GetValue then
+                    local rawValue = element.api.GetValue()
+                    
+                    -- Spezielle Behandlung für verschiedene Typen
+                    if element.type == "colorpicker" and typeof(rawValue) == "Color3" then
+                        return self:colorToRGB(rawValue)
+                    elseif element.type == "keybind" then
+                        return tostring(rawValue)
+                    elseif element.type == "multidropdown" and type(rawValue) == "table" then
+                        -- MultiDropdown als Array der ausgewählten Keys speichern
+                        local selected = {}
+                        for key, isSelected in pairs(rawValue) do
+                            if isSelected then
+                                table.insert(selected, key)
+                            end
+                        end
+                        return selected
+                    elseif element.type == "button" then
+                        -- Buttons speichern ihren Text-Wert
+                        return tostring(rawValue)
+                    else
+                        return rawValue
+                    end
+                end
+                return nil
+            end)
+            
+            if success and value ~= nil then
+                settings.elements[elementId] = {
+                    type = element.type,
+                    tabName = element.tabName,
+                    windowName = element.windowName,
+                    elementName = element.elementName,
+                    path = element.path,
+                    value = value
+                }
+                print("[ConfigManager] Saved element: " .. element.path .. " = " .. tostring(value))
+            end
+        end
+    else
+        print("[ConfigManager] No element registry found in hubInstance")
+    end
 end
 
 -- Settings auf GUI anwenden (robust)
@@ -336,6 +398,11 @@ function ConfigManager:applySettings(settings)
             end
         end
         
+        -- Element Settings anwenden
+        if settings.elements then
+            self:applyElementSettings(settings.elements)
+        end
+        
         return true
     end)
     
@@ -344,6 +411,56 @@ function ConfigManager:applySettings(settings)
     end
     
     return success
+end
+
+-- Element Settings anwenden
+function ConfigManager:applyElementSettings(elements)
+    if not self.hubInstance._getAllRegisteredElements then
+        print("[ConfigManager] No element registry found for applying settings")
+        return
+    end
+    
+    local registeredElements = self.hubInstance:_getAllRegisteredElements()
+    local appliedCount = 0
+    
+    for elementId, savedElement in pairs(elements) do
+        local registeredElement = registeredElements[elementId]
+        
+        if registeredElement and registeredElement.api and registeredElement.api.SetValue then
+            local success = pcall(function()
+                local value = savedElement.value
+                
+                -- Spezielle Behandlung für verschiedene Typen
+                if savedElement.type == "colorpicker" and type(value) == "table" then
+                    value = self:rgbToColor(value)
+                elseif savedElement.type == "keybind" and type(value) == "string" then
+                    -- Keybind bleibt als String
+                elseif savedElement.type == "multidropdown" and type(value) == "table" then
+                    -- MultiDropdown: Array in Map konvertieren
+                    local selectedMap = {}
+                    for _, key in ipairs(value) do
+                        selectedMap[key] = true
+                    end
+                    value = selectedMap
+                elseif savedElement.type == "button" and type(value) == "string" then
+                    -- Button Text setzen
+                    value = tostring(value)
+                end
+                
+                registeredElement.api.SetValue(value)
+                appliedCount = appliedCount + 1
+                print("[ConfigManager] Restored element: " .. savedElement.path .. " = " .. tostring(value))
+            end)
+            
+            if not success then
+                print("[ConfigManager] Failed to restore element: " .. savedElement.path)
+            end
+        else
+            print("[ConfigManager] Element not found in registry: " .. savedElement.path)
+        end
+    end
+    
+    print("[ConfigManager] Applied " .. appliedCount .. " element settings")
 end
 
 -- Config speichern (executor-optimiert)
@@ -651,6 +768,26 @@ end
 
 -- Debug Information
 function ConfigManager:getDebugInfo()
+    local elementCount = 0
+    local elementTypes = {}
+    local elementsByTab = {}
+    
+    if self.hubInstance and self.hubInstance._getAllRegisteredElements then
+        local elements = self.hubInstance:_getAllRegisteredElements()
+        for _, element in pairs(elements or {}) do
+            elementCount = elementCount + 1
+            elementTypes[element.type] = (elementTypes[element.type] or 0) + 1
+            
+            if not elementsByTab[element.tabName] then
+                elementsByTab[element.tabName] = {}
+            end
+            if not elementsByTab[element.tabName][element.windowName] then
+                elementsByTab[element.tabName][element.windowName] = 0
+            end
+            elementsByTab[element.tabName][element.windowName] = elementsByTab[element.tabName][element.windowName] + 1
+        end
+    end
+    
     return {
         initialized = self.isInitialized,
         hasFileSystem = self.hasFileSystem,
@@ -658,8 +795,35 @@ function ConfigManager:getDebugInfo()
         currentConfig = self.currentConfig,
         autoLoad = self.autoLoadConfig,
         memoryConfigs = self.hasFileSystem and 0 or table.getn(self.memoryStore.configs or {}),
-        fileSystemDetails = fileSystem
+        fileSystemDetails = fileSystem,
+        registeredElements = {
+            total = elementCount,
+            byType = elementTypes,
+            byTab = elementsByTab
+        }
     }
+end
+
+-- Debug: Alle registrierten Elemente anzeigen
+function ConfigManager:printAllRegisteredElements()
+    if not self.hubInstance or not self.hubInstance._getAllRegisteredElements then
+        print("[ConfigManager] No element registry available")
+        return
+    end
+    
+    local elements = self.hubInstance:_getAllRegisteredElements()
+    print("[ConfigManager] ===== REGISTERED ELEMENTS =====")
+    
+    for elementId, element in pairs(elements or {}) do
+        print(string.format("[ConfigManager] %s: %s (%s) - %s", 
+            elementId, 
+            element.path, 
+            element.type, 
+            element.elementName
+        ))
+    end
+    
+    print("[ConfigManager] ===== END REGISTERED ELEMENTS =====")
 end
 
 return ConfigManager
