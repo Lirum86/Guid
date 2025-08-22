@@ -22,7 +22,7 @@ function SettingsTab.Build(ui, afterTab, deps)
     
     -- Warte kurz, da ConfigManager möglicherweise noch nicht bereit ist
     local attempts = 0
-    while attempts < 5 do
+    while attempts < 10 do
         if ui._configManagerForSettings then
             print("[SettingsTab] Found ConfigManager from Library integration")
             ConfigSystem = ui._configManagerForSettings
@@ -37,9 +37,9 @@ function SettingsTab.Build(ui, afterTab, deps)
             break
         else
             attempts = attempts + 1
-            if attempts < 5 then
-                print("[SettingsTab] ConfigManager not ready, waiting... (attempt " .. attempts .. "/5)")
-                task.wait(0.1)
+            if attempts < 10 then
+                print("[SettingsTab] ConfigManager not ready, waiting... (attempt " .. attempts .. "/10)")
+                task.wait(0.5)
             end
         end
     end
@@ -342,14 +342,14 @@ function SettingsTab.Build(ui, afterTab, deps)
                     currentAutoLoad = ConfigSystem.GetAutoLoad()
                 end
                 
-                -- Wenn die gelöschte Config die AutoLoad-Config war, AutoLoad zurücksetzen
-                if currentAutoLoad == deletedConfig then
-                    if ConfigSystem.setAutoLoad then
-                        ConfigSystem:setAutoLoad(nil)
-                    elseif ConfigSystem.SetAutoLoad then
-                        ConfigSystem.SetAutoLoad(nil)
-                    end
-                    print("[SettingsTab] AutoLoad cleared after config deletion")
+                -- Wenn die gelöschte Config die AutoLoad-Config war, Checkbox deaktivieren
+                if not currentAutoLoad or currentAutoLoad == "" or currentAutoLoad == deletedConfig then
+                    pcall(function()
+                        if autoLoadCheckbox and autoLoadCheckbox.SetValue then
+                            autoLoadCheckbox.SetValue(false)
+                            print("[SettingsTab] AutoLoad checkbox deactivated after config deletion")
+                        end
+                    end)
                 end
                 
                 print("[SettingsTab] Config '" .. deletedConfig .. "' successfully deleted and UI updated")
@@ -359,7 +359,7 @@ function SettingsTab.Build(ui, afterTab, deps)
         end
     end)
 
-    -- AutoLoad Checkbox mit korrektem State - unabhängig von Config System
+    -- AutoLoad Checkbox mit korrektem State
     local autoLoadCheckbox = winCfg:CreateCheckbox("Auto Load Config", false, function(val)
         if ConfigSystem then
             if ConfigSystem.setAutoLoad then
@@ -370,36 +370,6 @@ function SettingsTab.Build(ui, afterTab, deps)
                 -- Altes ConfigSystem
                 ConfigSystem.SetAutoLoad(val and selectedConfig or nil)
             end
-        end
-    end)
-    
-    -- AutoLoad Checkbox State beim Start wiederherstellen
-    task.spawn(function()
-        task.wait(0.1) -- Kurz warten bis Checkbox erstellt ist
-        
-        local currentAutoLoad = nil
-        if ConfigSystem and ConfigSystem.getAutoLoad then
-            currentAutoLoad = ConfigSystem:getAutoLoad()
-        elseif ConfigSystem and ConfigSystem.GetAutoLoad then
-            currentAutoLoad = ConfigSystem.GetAutoLoad()
-        end
-        
-        if currentAutoLoad and currentAutoLoad ~= "" then
-            -- AutoLoad Checkbox aktivieren
-            pcall(function()
-                if autoLoadCheckbox and autoLoadCheckbox.SetValue then
-                    autoLoadCheckbox.SetValue(true)
-                    print("[SettingsTab] AutoLoad checkbox restored to: true")
-                end
-            end)
-        else
-            -- AutoLoad Checkbox deaktivieren
-            pcall(function()
-                if autoLoadCheckbox and autoLoadCheckbox.SetValue then
-                    autoLoadCheckbox.SetValue(false)
-                    print("[SettingsTab] AutoLoad checkbox restored to: false")
-                end
-            end)
         end
     end)
 
@@ -439,9 +409,9 @@ function SettingsTab.Build(ui, afterTab, deps)
         
         task.defer(function() refreshDropdown('Default') end)
         
-        -- AutoLoad prüfen und Config im Dropdown setzen (Checkbox wird separat behandelt)
+        -- AutoLoad prüfen und Checkbox synchronisieren
         task.spawn(function()
-            task.wait(0.1) -- Kurz warten bis alle UI-Elemente bereit sind
+            task.wait(0.5) -- Kurz warten bis alle UI-Elemente bereit sind
             
             local auto = nil
             if ConfigSystem.getAutoLoad then
@@ -460,7 +430,22 @@ function SettingsTab.Build(ui, afterTab, deps)
                     end 
                 end)
                 selectedConfig = auto
-                print("[SettingsTab] Config selected: " .. tostring(auto))
+                
+                -- AutoLoad Checkbox aktivieren
+                pcall(function()
+                    if autoLoadCheckbox and autoLoadCheckbox.SetValue then
+                        autoLoadCheckbox.SetValue(true)
+                        print("[SettingsTab] AutoLoad checkbox activated for: " .. auto)
+                    end
+                end)
+            else
+                -- AutoLoad Checkbox deaktivieren
+                pcall(function()
+                    if autoLoadCheckbox and autoLoadCheckbox.SetValue then
+                        autoLoadCheckbox.SetValue(false)
+                        print("[SettingsTab] AutoLoad checkbox deactivated")
+                    end
+                end)
             end
         end)
     end
