@@ -137,32 +137,28 @@ end
 function ConfigManager:delayedInitialize()
     task.spawn(function()
         local attempts = 0
-        local maxAttempts = 30
+        local maxAttempts = 10
         
         while attempts < maxAttempts do
             attempts = attempts + 1
             
             -- Warte bis GUI vollst\u00e4ndig geladen ist
             if self.hubInstance and self.hubInstance.tabs and #self.hubInstance.tabs > 0 then
-                task.wait(1) -- Extra Wartezeit f\u00fcr UI-Stabilit\u00e4t
-                
                 local success = self:initializeConfigSystem()
                 if success then
                     self.isInitialized = true
                     self:safeNotify('success', 'Config System', 'Ready! (FS: ' .. (self.hasFileSystem and 'Yes' or 'Memory') .. ')', 3)
                     
                     -- Debug: Alle registrierten Elemente anzeigen
-                    task.wait(1)
                     self:printAllRegisteredElements()
                     
                     -- AutoLoad nach erfolgreicher Initialisierung
-                    task.wait(0.5)
                     self:checkAutoLoad()
                     break
                 end
             end
             
-            task.wait(0.3)
+            task.wait(0.1)
         end
         
         if not self.isInitialized then
@@ -329,6 +325,12 @@ function ConfigManager:gatherRegisteredElements(settings)
         print("[ConfigManager] Found " .. elementCount .. " registered elements")
         
         for elementId, element in pairs(elements or {}) do
+            -- Auto Load Checkbox NICHT in Configs speichern
+            if element.path and element.path:find("Auto Load Config") then
+                print("[ConfigManager] Skipping Auto Load Checkbox from config save: " .. element.path)
+                goto continue
+            end
+            
             local success, value = pcall(function()
                 if element.api and element.api.GetValue then
                     local rawValue = element.api.GetValue()
@@ -368,6 +370,8 @@ function ConfigManager:gatherRegisteredElements(settings)
                 }
                 print("[ConfigManager] Saved element: " .. element.path .. " = " .. tostring(value))
             end
+            
+            ::continue::
         end
     else
         print("[ConfigManager] No element registry found in hubInstance")
@@ -424,6 +428,12 @@ function ConfigManager:applyElementSettings(elements)
     local appliedCount = 0
     
     for elementId, savedElement in pairs(elements) do
+        -- Auto Load Checkbox NICHT von Configs laden
+        if savedElement.path and savedElement.path:find("Auto Load Config") then
+            print("[ConfigManager] Skipping Auto Load Checkbox from config load: " .. savedElement.path)
+            goto continue
+        end
+        
         local registeredElement = registeredElements[elementId]
         
         if registeredElement and registeredElement.api and registeredElement.api.SetValue then
@@ -458,6 +468,8 @@ function ConfigManager:applyElementSettings(elements)
         else
             print("[ConfigManager] Element not found in registry: " .. savedElement.path)
         end
+        
+        ::continue::
     end
     
     print("[ConfigManager] Applied " .. appliedCount .. " element settings")
@@ -710,7 +722,6 @@ function ConfigManager:checkAutoLoad()
     
     if autoLoadConfig and autoLoadConfig ~= "" and self:configExists(autoLoadConfig) then
         print("[ConfigManager] AutoLoading config: " .. autoLoadConfig)
-        task.wait(1) -- Warten damit GUI vollst\u00e4ndig bereit ist
         return self:loadConfig(autoLoadConfig)
     end
     
