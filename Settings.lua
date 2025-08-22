@@ -13,18 +13,65 @@ end
 
 function SettingsTab.Build(ui, afterTab, deps)
     print("[SettingsTab] Building Settings Tab...")
+    print("[SettingsTab] UI instance type: " .. type(ui))
+    print("[SettingsTab] UI._configManagerForSettings: " .. tostring(ui._configManagerForSettings))
+    print("[SettingsTab] UI.configManager: " .. tostring(ui.configManager))
     
     -- Verwende neues ConfigManager System falls verfügbar, sonst Fallback
     local ConfigSystem = nil
     
-    if ui._configManagerForSettings then
-        print("[SettingsTab] Using integrated ConfigManager from Library")
-        ConfigSystem = ui._configManagerForSettings
-    elseif deps and deps.ConfigSystem then
-        print("[SettingsTab] Using ConfigSystem from deps")
-        ConfigSystem = deps.ConfigSystem
-    else
-        print("[SettingsTab] No ConfigSystem available!")
+    -- Warte kurz, da ConfigManager möglicherweise noch nicht bereit ist
+    local attempts = 0
+    while attempts < 10 do
+        if ui._configManagerForSettings then
+            print("[SettingsTab] Found ConfigManager from Library integration")
+            ConfigSystem = ui._configManagerForSettings
+            break
+        elseif ui.configManager then
+            print("[SettingsTab] Found ConfigManager directly on UI")
+            ConfigSystem = ui.configManager
+            break
+        elseif deps and deps.ConfigSystem then
+            print("[SettingsTab] Using ConfigSystem from deps")
+            ConfigSystem = deps.ConfigSystem
+            break
+        else
+            attempts = attempts + 1
+            if attempts < 10 then
+                print("[SettingsTab] ConfigManager not ready, waiting... (attempt " .. attempts .. "/10)")
+                task.wait(0.5)
+            end
+        end
+    end
+    
+    if not ConfigSystem then
+        print("[SettingsTab] No ConfigSystem available after " .. attempts .. " attempts!")
+        print("[SettingsTab] Attempting to load ConfigSystem manually...")
+        
+        -- Versuche ConfigSystem direkt zu laden
+        local success = pcall(function()
+            -- Lokales ConfigSystem probieren
+            local ok, module = pcall(function()
+                return require(script.Parent:WaitForChild("ConfigSystem"))
+            end)
+            
+            if ok and module then
+                print("[SettingsTab] Local ConfigSystem loaded successfully")
+                ConfigSystem = module.new(ui)
+            else
+                print("[SettingsTab] Local ConfigSystem failed, trying GitHub...")
+                -- GitHub Fallback
+                local ConfigManagerClass = loadstring(game:HttpGet("https://raw.githubusercontent.com/Lirum86/Guid/refs/heads/main/Config.lua"))()
+                if ConfigManagerClass then
+                    print("[SettingsTab] GitHub ConfigSystem loaded, creating instance...")
+                    ConfigSystem = ConfigManagerClass.new(ui)
+                end
+            end
+        end)
+        
+        if not success then
+            print("[SettingsTab] Manual ConfigSystem loading failed")
+        end
     end
     
     if ConfigSystem then
@@ -292,6 +339,22 @@ function SettingsTab.Build(ui, afterTab, deps)
                 -- Altes ConfigSystem
                 ConfigSystem.SetAutoLoad(val and selectedConfig or nil)
             end
+        end
+    end)
+
+    -- Debug Button für registrierte Elemente
+    winCfg:CreateButton("Debug: Show Elements", function()
+        if ConfigSystem and ConfigSystem.printAllRegisteredElements then
+            ConfigSystem:printAllRegisteredElements()
+            
+            local debugInfo = ConfigSystem:getDebugInfo()
+            if debugInfo and debugInfo.registeredElements then
+                local total = debugInfo.registeredElements.total
+                local msg = string.format("Found %d registered elements. Check console for details.", total)
+                print("[SettingsTab] " .. msg)
+            end
+        else
+            print("[SettingsTab] No debug function available")
         end
     end)
 
