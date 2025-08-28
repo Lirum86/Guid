@@ -358,21 +358,7 @@ function SettingsTab.Build(ui, afterTab, deps)
         end
     end)
 
-    -- Debug Button für registrierte Elemente
-    winCfg:CreateButton("Debug: Show Elements", function()
-        if ConfigSystem and ConfigSystem.printAllRegisteredElements then
-            ConfigSystem:printAllRegisteredElements()
-            
-            local debugInfo = ConfigSystem:getDebugInfo()
-            if debugInfo and debugInfo.registeredElements then
-                local total = debugInfo.registeredElements.total
-                local msg = string.format("Found %d registered elements. Check console for details.", total)
-                print("[SettingsTab] " .. msg)
-            end
-        else
-            print("[SettingsTab] No debug function available")
-        end
-    end)
+
 
     -- Ensure default exists and auto refresh list on build
     if ConfigSystem then
