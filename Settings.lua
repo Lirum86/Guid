@@ -22,7 +22,7 @@ function SettingsTab.Build(ui, afterTab, deps)
     
     -- Warte kurz, da ConfigManager möglicherweise noch nicht bereit ist
     local attempts = 0
-    while attempts < 10 do
+    while attempts < 5 do  -- Reduced from 10
         if ui._configManagerForSettings then
             print("[SettingsTab] Found ConfigManager from Library integration")
             ConfigSystem = ui._configManagerForSettings
@@ -37,9 +37,9 @@ function SettingsTab.Build(ui, afterTab, deps)
             break
         else
             attempts = attempts + 1
-            if attempts < 10 then
-                print("[SettingsTab] ConfigManager not ready, waiting... (attempt " .. attempts .. "/10)")
-                task.wait(0.5)
+            if attempts < 5 then  -- Reduced from 10
+                print("[SettingsTab] ConfigManager not ready, waiting... (attempt " .. attempts .. "/5)")
+                task.wait(0.2)  -- Reduced from 0.5
             end
         end
     end
@@ -411,7 +411,7 @@ function SettingsTab.Build(ui, afterTab, deps)
         
         -- AutoLoad prüfen und Checkbox synchronisieren
         task.spawn(function()
-            task.wait(0.5) -- Kurz warten bis alle UI-Elemente bereit sind
+            task.wait(0.2) -- Reduced from 0.5 seconds
             
             local auto = nil
             if ConfigSystem.getAutoLoad then
