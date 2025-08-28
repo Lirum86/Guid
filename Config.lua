@@ -137,32 +137,30 @@ end
 function ConfigManager:delayedInitialize()
     task.spawn(function()
         local attempts = 0
-        local maxAttempts = 30
+        local maxAttempts = 10  -- Reduced from 30
         
         while attempts < maxAttempts do
             attempts = attempts + 1
             
             -- Warte bis GUI vollst\u00e4ndig geladen ist
             if self.hubInstance and self.hubInstance.tabs and #self.hubInstance.tabs > 0 then
-                task.wait(1) -- Extra Wartezeit f\u00fcr UI-Stabilit\u00e4t
+                task.wait(0.1)  -- Reduced from 1 second
                 
                 local success = self:initializeConfigSystem()
                 if success then
                     self.isInitialized = true
                     self:safeNotify('success', 'Config System', 'Ready! (FS: ' .. (self.hasFileSystem and 'Yes' or 'Memory') .. ')', 3)
                     
-                    -- Debug: Alle registrierten Elemente anzeigen
-                    task.wait(1)
+                    -- Debug: Alle registrierten Elemente anzeigen (removed extra wait)
                     self:printAllRegisteredElements()
                     
-                    -- AutoLoad nach erfolgreicher Initialisierung
-                    task.wait(0.5)
+                    -- AutoLoad nach erfolgreicher Initialisierung (removed extra wait)
                     self:checkAutoLoad()
                     break
                 end
             end
             
-            task.wait(0.3)
+            task.wait(0.1)  -- Reduced from 0.3
         end
         
         if not self.isInitialized then
@@ -710,7 +708,7 @@ function ConfigManager:checkAutoLoad()
     
     if autoLoadConfig and autoLoadConfig ~= "" and self:configExists(autoLoadConfig) then
         print("[ConfigManager] AutoLoading config: " .. autoLoadConfig)
-        task.wait(1) -- Warten damit GUI vollst\u00e4ndig bereit ist
+        task.wait(0.2) -- Reduced from 1 second
         return self:loadConfig(autoLoadConfig)
     end
     
