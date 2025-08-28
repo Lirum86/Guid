@@ -293,7 +293,7 @@ function ModernUI:_createWatermark()
     self._watermarkFrame.Name = 'Watermark'
     self._watermarkFrame.BackgroundColor3 = self.options.theme.surface
     self._watermarkFrame.BorderSizePixel = 0
-    self._watermarkFrame.Size = UDim2.new(0, 140, 0, 26)
+    self._watermarkFrame.Size = UDim2.new(0, 160, 0, 32) -- Größer gemacht
     self._watermarkFrame.Position = UDim2.new(1, -190, 0, 8)
     self._watermarkFrame.AnchorPoint = Vector2.new(0, 0)
     self._watermarkFrame.Active = true
@@ -301,16 +301,32 @@ function ModernUI:_createWatermark()
     self._watermarkFrame.Parent = self.screenGui
 
     local wmCorner = Instance.new('UICorner')
-    wmCorner.CornerRadius = UDim.new(0, 5)
+    wmCorner.CornerRadius = UDim.new(0, 6) -- Etwas größerer Radius
     wmCorner.Parent = self._watermarkFrame
+
+    -- Farbiger Strich auf der linken Seite
+    local accentBar = Instance.new('Frame')
+    accentBar.Name = 'AccentBar'
+    accentBar.Size = UDim2.new(0, 3, 1, 0) -- 3px breiter Strich
+    accentBar.Position = UDim2.new(0, 0, 0, 0)
+    accentBar.BackgroundColor3 = self.options.theme.primary -- Theme-Farbe
+    accentBar.BorderSizePixel = 0
+    accentBar.Parent = self._watermarkFrame
+
+    local accentCorner = Instance.new('UICorner')
+    accentCorner.CornerRadius = UDim.new(0, 6)
+    accentCorner.Parent = accentBar
+
+    -- Speichere Referenz für Theme-Updates
+    self._watermarkAccentBar = accentBar
 
     local wmLabel = Instance.new('TextLabel')
     wmLabel.Name = 'Label'
     wmLabel.BackgroundTransparency = 1
-    wmLabel.Size = UDim2.new(1, -12, 1, 0) -- 6px links + 6px rechts Padding
-    wmLabel.Position = UDim2.new(0, 6, 0, 0)
+    wmLabel.Size = UDim2.new(1, -18, 1, 0) -- Mehr Platz für den Strich
+    wmLabel.Position = UDim2.new(0, 12, 0, 0) -- Weiter nach rechts verschoben
     wmLabel.Font = Enum.Font.Gotham
-    wmLabel.TextSize = 12
+    wmLabel.TextSize = 14 -- Größere Schrift
     wmLabel.TextXAlignment = Enum.TextXAlignment.Left
     wmLabel.TextColor3 = self.options.theme.text
     wmLabel.RichText = true
@@ -327,8 +343,8 @@ function ModernUI:_createWatermark()
         local lynix = string.format('<font color="%s">Lynix</font>', colorToHex(self.options.theme.primary))
         wmLabel.Text = string.format("%s | %d FPS | %d ms", lynix, fps, pingMs)
         local plainText = string.format("Lynix | %d FPS | %d ms", fps, pingMs)
-        local bounds = TextService:GetTextSize(plainText, wmLabel.TextSize, wmLabel.Font, Vector2.new(10000, 26))
-        self._watermarkFrame.Size = UDim2.new(0, bounds.X + 12, 0, 26)
+        local bounds = TextService:GetTextSize(plainText, wmLabel.TextSize, wmLabel.Font, Vector2.new(10000, 32))
+        self._watermarkFrame.Size = UDim2.new(0, bounds.X + 18, 0, 32) -- Angepasst an neue Größe
     end
 
     -- Efficient update: one per frame for FPS, ping sampled when available
@@ -2433,6 +2449,12 @@ function ModernUI:SetTheme(theme)
             end
         end
     end
+    
+    -- Update watermark accent bar color
+    if self._watermarkAccentBar and self._watermarkAccentBar.Parent then
+        self._watermarkAccentBar.BackgroundColor3 = primary
+    end
+    
     -- Update tabs immediately
     self:_applyTabThemeColors()
 end
