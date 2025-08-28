@@ -320,6 +320,12 @@ end
 
 -- Sammle alle registrierten UI-Elemente
 function ConfigManager:gatherRegisteredElements(settings)
+    -- Elemente die NICHT gespeichert werden sollen
+    local excludeElements = {
+        "Auto Load Config",
+        -- Weitere Elemente die du ausschließen willst können hier hinzugefügt werden
+    }
+    
     if self.hubInstance._getAllRegisteredElements then
         local elements = self.hubInstance:_getAllRegisteredElements()
         local elementCount = 0
@@ -327,44 +333,56 @@ function ConfigManager:gatherRegisteredElements(settings)
         print("[ConfigManager] Found " .. elementCount .. " registered elements")
         
         for elementId, element in pairs(elements or {}) do
-            local success, value = pcall(function()
-                if element.api and element.api.GetValue then
-                    local rawValue = element.api.GetValue()
-                    
-                    -- Spezielle Behandlung für verschiedene Typen
-                    if element.type == "colorpicker" and typeof(rawValue) == "Color3" then
-                        return self:colorToRGB(rawValue)
-                    elseif element.type == "keybind" then
-                        return tostring(rawValue)
-                    elseif element.type == "multidropdown" and type(rawValue) == "table" then
-                        -- MultiDropdown als Array der ausgewählten Keys speichern
-                        local selected = {}
-                        for key, isSelected in pairs(rawValue) do
-                            if isSelected then
-                                table.insert(selected, key)
-                            end
-                        end
-                        return selected
-                    elseif element.type == "button" then
-                        -- Buttons speichern ihren Text-Wert
-                        return tostring(rawValue)
-                    else
-                        return rawValue
-                    end
+            -- Überspringe ausgeschlossene Elemente
+            local skip = false
+            for _, excludeName in ipairs(excludeElements) do
+                if element.elementName == excludeName then
+                    skip = true
+                    print("[ConfigManager] Skipping excluded element: " .. excludeName)
+                    break
                 end
-                return nil
-            end)
+            end
             
-            if success and value ~= nil then
-                settings.elements[elementId] = {
-                    type = element.type,
-                    tabName = element.tabName,
-                    windowName = element.windowName,
-                    elementName = element.elementName,
-                    path = element.path,
-                    value = value
-                }
-                print("[ConfigManager] Saved element: " .. element.path .. " = " .. tostring(value))
+            if not skip then
+                local success, value = pcall(function()
+                    if element.api and element.api.GetValue then
+                        local rawValue = element.api.GetValue()
+                        
+                        -- Spezielle Behandlung für verschiedene Typen
+                        if element.type == "colorpicker" and typeof(rawValue) == "Color3" then
+                            return self:colorToRGB(rawValue)
+                        elseif element.type == "keybind" then
+                            return tostring(rawValue)
+                        elseif element.type == "multidropdown" and type(rawValue) == "table" then
+                            -- MultiDropdown als Array der ausgewählten Keys speichern
+                            local selected = {}
+                            for key, isSelected in pairs(rawValue) do
+                                if isSelected then
+                                    table.insert(selected, key)
+                                end
+                            end
+                            return selected
+                        elseif element.type == "button" then
+                            -- Buttons speichern ihren Text-Wert
+                            return tostring(rawValue)
+                        else
+                            return rawValue
+                        end
+                    end
+                    return nil
+                end)
+                
+                if success and value ~= nil then
+                    settings.elements[elementId] = {
+                        type = element.type,
+                        tabName = element.tabName,
+                        windowName = element.windowName,
+                        elementName = element.elementName,
+                        path = element.path,
+                        value = value
+                    }
+                    print("[ConfigManager] Saved element: " .. element.path .. " = " .. tostring(value))
+                end
             end
         end
     else
@@ -413,6 +431,12 @@ end
 
 -- Element Settings anwenden
 function ConfigManager:applyElementSettings(elements)
+    -- Elemente die NICHT überschrieben werden sollen
+    local excludeElements = {
+        "Auto Load Config",
+        -- Weitere Elemente die du ausschließen willst können hier hinzugefügt werden
+    }
+    
     if not self.hubInstance._getAllRegisteredElements then
         print("[ConfigManager] No element registry found for applying settings")
         return
@@ -422,39 +446,51 @@ function ConfigManager:applyElementSettings(elements)
     local appliedCount = 0
     
     for elementId, savedElement in pairs(elements) do
-        local registeredElement = registeredElements[elementId]
-        
-        if registeredElement and registeredElement.api and registeredElement.api.SetValue then
-            local success = pcall(function()
-                local value = savedElement.value
-                
-                -- Spezielle Behandlung für verschiedene Typen
-                if savedElement.type == "colorpicker" and type(value) == "table" then
-                    value = self:rgbToColor(value)
-                elseif savedElement.type == "keybind" and type(value) == "string" then
-                    -- Keybind bleibt als String
-                elseif savedElement.type == "multidropdown" and type(value) == "table" then
-                    -- MultiDropdown: Array in Map konvertieren
-                    local selectedMap = {}
-                    for _, key in ipairs(value) do
-                        selectedMap[key] = true
-                    end
-                    value = selectedMap
-                elseif savedElement.type == "button" and type(value) == "string" then
-                    -- Button Text setzen
-                    value = tostring(value)
-                end
-                
-                registeredElement.api.SetValue(value)
-                appliedCount = appliedCount + 1
-                print("[ConfigManager] Restored element: " .. savedElement.path .. " = " .. tostring(value))
-            end)
-            
-            if not success then
-                print("[ConfigManager] Failed to restore element: " .. savedElement.path)
+        -- Überspringe ausgeschlossene Elemente
+        local skip = false
+        for _, excludeName in ipairs(excludeElements) do
+            if savedElement.elementName == excludeName then
+                skip = true
+                print("[ConfigManager] Skipping excluded element during restore: " .. excludeName)
+                break
             end
-        else
-            print("[ConfigManager] Element not found in registry: " .. savedElement.path)
+        end
+        
+        if not skip then
+            local registeredElement = registeredElements[elementId]
+            
+            if registeredElement and registeredElement.api and registeredElement.api.SetValue then
+                local success = pcall(function()
+                    local value = savedElement.value
+                    
+                    -- Spezielle Behandlung für verschiedene Typen
+                    if savedElement.type == "colorpicker" and type(value) == "table" then
+                        value = self:rgbToColor(value)
+                    elseif savedElement.type == "keybind" and type(value) == "string" then
+                        -- Keybind bleibt als String
+                    elseif savedElement.type == "multidropdown" and type(value) == "table" then
+                        -- MultiDropdown: Array in Map konvertieren
+                        local selectedMap = {}
+                        for _, key in ipairs(value) do
+                            selectedMap[key] = true
+                        end
+                        value = selectedMap
+                    elseif savedElement.type == "button" and type(value) == "string" then
+                        -- Button Text setzen
+                        value = tostring(value)
+                    end
+                    
+                    registeredElement.api.SetValue(value)
+                    appliedCount = appliedCount + 1
+                    print("[ConfigManager] Restored element: " .. savedElement.path .. " = " .. tostring(value))
+                end)
+                
+                if not success then
+                    print("[ConfigManager] Failed to restore element: " .. savedElement.path)
+                end
+            else
+                print("[ConfigManager] Element not found in registry: " .. savedElement.path)
+            end
         end
     end
     
