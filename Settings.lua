@@ -394,7 +394,7 @@ function SettingsTab.Build(ui, afterTab, deps)
         
         task.defer(function() refreshDropdown('Default') end)
         
-        -- AutoLoad wird nicht automatisch synchronisiert (nur manuelle Kontrolle)
+        -- AutoLoad Status beim Start anzeigen (aber nur visuell, nicht automatisch ändern)
         task.spawn(function()
             task.wait(0.2) -- Reduced from 0.5 seconds
             
@@ -408,16 +408,29 @@ function SettingsTab.Build(ui, afterTab, deps)
             print("[SettingsTab] Current AutoLoad config: " .. tostring(auto))
             
             if auto and auto ~= "" then
-                -- Config im Dropdown setzen (aber Checkbox nicht automatisch ändern)
+                -- Config im Dropdown setzen
                 pcall(function() 
                     if configsDropdown and configsDropdown.SetValue then 
                         configsDropdown.SetValue(auto) 
                     end 
                 end)
                 selectedConfig = auto
-                print("[SettingsTab] AutoLoad config found but checkbox state unchanged (manual control only)")
+                
+                -- Checkbox visuell auf den korrekten Status setzen (nur beim Start)
+                pcall(function()
+                    if autoLoadCheckbox and autoLoadCheckbox.SetValue then
+                        autoLoadCheckbox.SetValue(true)
+                        print("[SettingsTab] AutoLoad checkbox visually set to true (startup only)")
+                    end
+                end)
             else
-                print("[SettingsTab] No AutoLoad config found, checkbox state unchanged (manual control only)")
+                -- Checkbox visuell auf false setzen (nur beim Start)
+                pcall(function()
+                    if autoLoadCheckbox and autoLoadCheckbox.SetValue then
+                        autoLoadCheckbox.SetValue(false)
+                        print("[SettingsTab] AutoLoad checkbox visually set to false (startup only)")
+                    end
+                end)
             end
         end)
     end
