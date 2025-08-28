@@ -744,7 +744,7 @@ function ConfigManager:checkAutoLoad()
     
     if autoLoadConfig and autoLoadConfig ~= "" and self:configExists(autoLoadConfig) then
         print("[ConfigManager] AutoLoading config: " .. autoLoadConfig)
-        task.wait(0.2) -- Reduced from 1 second
+        task.wait(0.01) -- Reduced from 1 second
         return self:loadConfig(autoLoadConfig)
     end
     
