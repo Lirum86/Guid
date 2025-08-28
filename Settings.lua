@@ -334,23 +334,8 @@ function SettingsTab.Build(ui, afterTab, deps)
                     selectedConfig = list[1]
                 end
                 
-                -- AutoLoad-Status prüfen und Checkbox aktualisieren
-                local currentAutoLoad = nil
-                if ConfigSystem.getAutoLoad then
-                    currentAutoLoad = ConfigSystem:getAutoLoad()
-                elseif ConfigSystem.GetAutoLoad then
-                    currentAutoLoad = ConfigSystem.GetAutoLoad()
-                end
-                
-                -- Wenn die gelöschte Config die AutoLoad-Config war, Checkbox deaktivieren
-                if not currentAutoLoad or currentAutoLoad == "" or currentAutoLoad == deletedConfig then
-                    pcall(function()
-                        if autoLoadCheckbox and autoLoadCheckbox.SetValue then
-                            autoLoadCheckbox.SetValue(false)
-                            print("[SettingsTab] AutoLoad checkbox deactivated after config deletion")
-                        end
-                    end)
-                end
+                -- AutoLoad-Status wird nicht automatisch geändert (nur manuelle Kontrolle)
+                print("[SettingsTab] AutoLoad checkbox state unchanged (manual control only)")
                 
                 print("[SettingsTab] Config '" .. deletedConfig .. "' successfully deleted and UI updated")
             end)
@@ -409,7 +394,7 @@ function SettingsTab.Build(ui, afterTab, deps)
         
         task.defer(function() refreshDropdown('Default') end)
         
-        -- AutoLoad prüfen und Checkbox synchronisieren
+        -- AutoLoad wird nicht automatisch synchronisiert (nur manuelle Kontrolle)
         task.spawn(function()
             task.wait(0.2) -- Reduced from 0.5 seconds
             
@@ -423,29 +408,16 @@ function SettingsTab.Build(ui, afterTab, deps)
             print("[SettingsTab] Current AutoLoad config: " .. tostring(auto))
             
             if auto and auto ~= "" then
-                -- Config im Dropdown setzen
+                -- Config im Dropdown setzen (aber Checkbox nicht automatisch ändern)
                 pcall(function() 
                     if configsDropdown and configsDropdown.SetValue then 
                         configsDropdown.SetValue(auto) 
                     end 
                 end)
                 selectedConfig = auto
-                
-                -- AutoLoad Checkbox aktivieren
-                pcall(function()
-                    if autoLoadCheckbox and autoLoadCheckbox.SetValue then
-                        autoLoadCheckbox.SetValue(true)
-                        print("[SettingsTab] AutoLoad checkbox activated for: " .. auto)
-                    end
-                end)
+                print("[SettingsTab] AutoLoad config found but checkbox state unchanged (manual control only)")
             else
-                -- AutoLoad Checkbox deaktivieren
-                pcall(function()
-                    if autoLoadCheckbox and autoLoadCheckbox.SetValue then
-                        autoLoadCheckbox.SetValue(false)
-                        print("[SettingsTab] AutoLoad checkbox deactivated")
-                    end
-                end)
+                print("[SettingsTab] No AutoLoad config found, checkbox state unchanged (manual control only)")
             end
         end)
     end
