@@ -533,12 +533,10 @@ function ModernUI:CreateTab(name, icon)
 
     -- Keep the scrollable area sized to tallest column
     local function updateCanvasSize()
-        task.defer(function()
-            local h1 = list1.AbsoluteContentSize.Y
-            local h2 = list2.AbsoluteContentSize.Y
-            local tallest = math.max(h1, h2)
-            contentFrame.CanvasSize = UDim2.new(0, 0, 0, tallest + 40)
-        end)
+        local h1 = list1.AbsoluteContentSize.Y
+        local h2 = list2.AbsoluteContentSize.Y
+        local tallest = math.max(h1, h2)
+        contentFrame.CanvasSize = UDim2.new(0, 0, 0, tallest + 40)
     end
     list1:GetPropertyChangedSignal('AbsoluteContentSize'):Connect(updateCanvasSize)
     list2:GetPropertyChangedSignal('AbsoluteContentSize'):Connect(updateCanvasSize)
@@ -2444,7 +2442,7 @@ function ModernUI:_setupConfigManagerIntegration()
     -- Automatisches Laden des Config Systems
     task.spawn(function()
         print("[Library] Starting ConfigManager integration...")
-        task.wait(2) -- Warten bis GUI vollständig initialisiert ist
+        task.wait(0.5) -- Reduced from 2 seconds
         
         local success = pcall(function()
             -- Versuche Config System zu laden
