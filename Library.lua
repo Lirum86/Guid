@@ -2464,7 +2464,7 @@ function ModernUI:_setupConfigManagerIntegration()
     -- Automatisches Laden des Config Systems
     task.spawn(function()
         print("[Library] Starting ConfigManager integration...")
-        task.wait(0.5) -- Reduced from 2 seconds
+        task.wait(0.01) -- Reduced from 2 seconds
         
         local success = pcall(function()
             -- Versuche Config System zu laden
