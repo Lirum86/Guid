@@ -16,43 +16,16 @@ local Stats = game:GetService('Stats')
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild('PlayerGui')
 
--- Device Detection
-local function isMobile()
-    return UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
-end
-
-local function getDeviceType()
-    if isMobile() then
-        return "Mobile"
-    else
-        return "Desktop"
-    end
-end
-
-local function getViewportSize()
-    return workspace.CurrentCamera.ViewportSize
-end
-
-local function isSmallScreen()
-    local viewport = getViewportSize()
-    return viewport.X < 768 or viewport.Y < 600
-end
-
 -- Library Funktionen
 function ModernUI.new(options)
     local self = setmetatable({}, ModernUI)
     
-    -- Device Detection
-    self.deviceType = getDeviceType()
-    self.isMobile = (self.deviceType == "Mobile")
-    self.isSmallScreen = isSmallScreen()
-    
-    -- Standard Optionen mit Mobile Support
+    -- Standard Optionen
     local defaults = {
         title = "ModernUI",
-        size = self.isMobile and UDim2.new(0.9, 0, 0.85, 0) or UDim2.new(0, 650, 0, 430), -- Mobile: % basiert
+        size = UDim2.new(0, 650, 0, 430),
         logo = 'rbxassetid://137631839282026',
-        draggable = not self.isMobile, -- Dragging auf Mobile deaktivieren
+        draggable = true,
         theme = {
             primary = Color3.fromRGB(110, 117, 243),
             background = Color3.fromRGB(19, 18, 21),
@@ -105,21 +78,11 @@ function ModernUI:_createMainFrame()
     self.screenGui.Parent = playerGui
     self.screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
-    -- Hauptframe mit Mobile Scaling
+    -- Hauptframe
     self.mainFrame = Instance.new('Frame')
     self.mainFrame.Name = 'MainFrame'
     self.mainFrame.Size = self.options.size
-    
-    if self.isMobile then
-        -- Mobile: Zentriert mit Margins
-        self.mainFrame.Position = UDim2.new(0.05, 0, 0.075, 0)
-        self.mainFrame.AnchorPoint = Vector2.new(0, 0)
-    else
-        -- Desktop: Zentriert
-        self.mainFrame.Position = UDim2.new(0.5, -self.options.size.X.Offset/2, 0.5, -self.options.size.Y.Offset/2)
-        self.mainFrame.AnchorPoint = Vector2.new(0, 0)
-    end
-    
+    self.mainFrame.Position = UDim2.new(0.5, -self.options.size.X.Offset/2, 0.5, -self.options.size.Y.Offset/2)
     self.mainFrame.BackgroundColor3 = self.options.theme.background
     self.mainFrame.BorderSizePixel = 0
     self.mainFrame.Parent = self.screenGui
@@ -189,38 +152,20 @@ function ModernUI:_createMainFrame()
         self:Destroy()
     end)
 
-    -- Tab Container Mobile Anpassung
+    -- Tab Container
     self.tabContainer = Instance.new('Frame')
     self.tabContainer.Name = 'TabContainer'
-    
-    if self.isMobile then
-        -- Mobile: Tabs unten (horizontal)
-        self.tabContainer.Size = UDim2.new(1, -20, 0, 60)
-        self.tabContainer.Position = UDim2.new(0, 10, 1, -70)
-    else
-        -- Desktop: Tabs links (vertikal)
-        self.tabContainer.Size = UDim2.new(0, 120, 1, -130)
-        self.tabContainer.Position = UDim2.new(0, 0, 0, 50)
-    end
-    
+    self.tabContainer.Size = UDim2.new(0, 120, 1, -130)
+    self.tabContainer.Position = UDim2.new(0, 0, 0, 50)
     self.tabContainer.BackgroundColor3 = self.options.theme.background
     self.tabContainer.BorderSizePixel = 0
     self.tabContainer.Parent = self.mainFrame
 
-    -- Content Container Mobile Anpassung
+    -- Content Container
     self.contentContainer = Instance.new('Frame')
     self.contentContainer.Name = 'ContentContainer'
-    
-    if self.isMobile then
-        -- Mobile: Content oben, Tabs unten
-        self.contentContainer.Size = UDim2.new(1, -20, 1, -132) -- Platz für Tabs unten
-        self.contentContainer.Position = UDim2.new(0, 10, 0, 50)
-    else
-        -- Desktop: Content rechts, Tabs links
-        self.contentContainer.Size = UDim2.new(1, -120, 1, -62)
-        self.contentContainer.Position = UDim2.new(0, 120, 0, 50)
-    end
-    
+    self.contentContainer.Size = UDim2.new(1, -120, 1, -62)
+    self.contentContainer.Position = UDim2.new(0, 120, 0, 50)
     self.contentContainer.BackgroundColor3 = self.options.theme.background
     self.contentContainer.BorderSizePixel = 0
     self.contentContainer.Parent = self.mainFrame
@@ -348,17 +293,8 @@ function ModernUI:_createWatermark()
     self._watermarkFrame.Name = 'Watermark'
     self._watermarkFrame.BackgroundColor3 = self.options.theme.surface
     self._watermarkFrame.BorderSizePixel = 0
-    
-    if self.isMobile then
-        -- Mobile: Kleinere Watermark, unten positioniert
-        self._watermarkFrame.Size = UDim2.new(0, 120, 0, 24)
-        self._watermarkFrame.Position = UDim2.new(1, -130, 1, -30)
-    else
-        -- Desktop: Normale Größe, oben rechts
-        self._watermarkFrame.Size = UDim2.new(0, 160, 0, 32)
-        self._watermarkFrame.Position = UDim2.new(1, -190, 0, 8)
-    end
-    
+    self._watermarkFrame.Size = UDim2.new(0, 160, 0, 32) -- Größer gemacht
+    self._watermarkFrame.Position = UDim2.new(1, -190, 0, 8)
     self._watermarkFrame.AnchorPoint = Vector2.new(0, 0)
     self._watermarkFrame.Active = true
     self._watermarkFrame.Visible = true
@@ -407,14 +343,8 @@ function ModernUI:_createWatermark()
         local lynix = string.format('<font color="%s">Lynix</font>', colorToHex(self.options.theme.primary))
         wmLabel.Text = string.format("%s | %d FPS | %d ms", lynix, fps, pingMs)
         local plainText = string.format("Lynix | %d FPS | %d ms", fps, pingMs)
-        
-        if self.isMobile then
-            local bounds = TextService:GetTextSize(plainText, wmLabel.TextSize, wmLabel.Font, Vector2.new(10000, 24))
-            self._watermarkFrame.Size = UDim2.new(0, bounds.X + 18, 0, 24) -- Mobile Größe
-        else
-            local bounds = TextService:GetTextSize(plainText, wmLabel.TextSize, wmLabel.Font, Vector2.new(10000, 32))
-            self._watermarkFrame.Size = UDim2.new(0, bounds.X + 18, 0, 32) -- Desktop Größe
-        end
+        local bounds = TextService:GetTextSize(plainText, wmLabel.TextSize, wmLabel.Font, Vector2.new(10000, 32))
+        self._watermarkFrame.Size = UDim2.new(0, bounds.X + 18, 0, 32) -- Angepasst an neue Größe
     end
 
     -- Efficient update: one per frame for FPS, ping sampled when available
@@ -513,27 +443,16 @@ end
 function ModernUI:CreateTab(name, icon)
     local tabIndex = #self.tabs + 1
     
-    -- Tab Button mit Mobile Layout
+    -- Tab Button
     local tabButton = Instance.new('TextButton')
     tabButton.Name = name .. 'Tab'
-    
-    if self.isMobile then
-        -- Mobile: Horizontale Tabs
-        local tabWidth = 1 / math.max(4, #self.tabs + 1) -- Max 4 tabs sichtbar
-        tabButton.Size = UDim2.new(tabWidth, -5, 1, -10)
-        tabButton.Position = UDim2.new(tabWidth * (tabIndex - 1), 5, 0, 5)
-        tabButton.TextSize = 12 -- Kleinere Schrift für Mobile
-    else
-        -- Desktop: Vertikale Tabs
-        tabButton.Size = UDim2.new(1, -15, 0, 35)
-        tabButton.Position = UDim2.new(0, 10, 0, (tabIndex - 1) * 45 + 10)
-        tabButton.TextSize = 14
-    end
-    
+    tabButton.Size = UDim2.new(1, -15, 0, 35)
+    tabButton.Position = UDim2.new(0, 10, 0, (tabIndex - 1) * 45 + 10)
     tabButton.BackgroundColor3 = self.options.theme.surface
     tabButton.BorderSizePixel = 0
     tabButton.Text = name
     tabButton.TextColor3 = self.options.theme.text
+    tabButton.TextSize = 14
     tabButton.Font = Enum.Font.Gotham
     tabButton.Parent = self.tabContainer
 
@@ -835,23 +754,19 @@ function ModernUI:_createCheckbox(window, text, default, callback)
     default = default or false
     callback = callback or function() end
     
-    -- Mobile: Größere Touch-Targets
-    local checkboxSize = self.isMobile and 24 or 18
-    local containerHeight = self.isMobile and 35 or 25
-    
     local container = Instance.new('Frame')
     container.Name = 'CheckboxContainer'
-    container.Size = UDim2.new(1, 0, 0, containerHeight)
+    container.Size = UDim2.new(1, 0, 0, 25)
     container.Position = UDim2.new(0, 0, 0, window._nextY)
     container.BackgroundTransparency = 1
     container.Parent = window.content
     
-    window._nextY = window._nextY + (self.isMobile and 40 or 30)
+    window._nextY = window._nextY + 30
 
     local checkbox = Instance.new('ImageButton')
     checkbox.Name = 'Checkbox'
-    checkbox.Size = UDim2.new(0, checkboxSize, 0, checkboxSize)
-    checkbox.Position = UDim2.new(0, 0, 0.5, -checkboxSize/2)
+    checkbox.Size = UDim2.new(0, 18, 0, 18)
+    checkbox.Position = UDim2.new(0, 0, 0.5, -9)
     checkbox.BackgroundColor3 = self.options.theme.surface
     checkbox.BorderSizePixel = 0
     checkbox.Image = ''
@@ -859,9 +774,8 @@ function ModernUI:_createCheckbox(window, text, default, callback)
 
     local checkIcon = Instance.new('ImageLabel')
     checkIcon.Name = 'CheckIcon'
-    local iconSize = self.isMobile and 16 or 12
-    checkIcon.Size = UDim2.new(0, iconSize, 0, iconSize)
-    checkIcon.Position = UDim2.new(0.5, -iconSize/2, 0.5, -iconSize/2)
+    checkIcon.Size = UDim2.new(0, 12, 0, 12)
+    checkIcon.Position = UDim2.new(0.5, -6, 0.5, -5)
     checkIcon.BackgroundTransparency = 1
     checkIcon.Image = ''
     checkIcon.ImageColor3 = Color3.fromRGB(0, 0, 0)
@@ -873,16 +787,15 @@ function ModernUI:_createCheckbox(window, text, default, callback)
 
     local label = Instance.new('TextLabel')
     label.Name = 'Label'
-    local labelOffset = self.isMobile and 30 or 25
-    label.Size = UDim2.new(1, -labelOffset, 1, 0)
-    label.Position = UDim2.new(0, labelOffset, 0, 0)
+    label.Size = UDim2.new(1, -25, 1, 0)
+    label.Position = UDim2.new(0, 25, 0, 0)
     label.BackgroundTransparency = 1
     label.Text = text
     label.TextColor3 = self.options.theme.text
     label.TextXAlignment = Enum.TextXAlignment.Left
     label.TextYAlignment = Enum.TextYAlignment.Center
     label.Font = Enum.Font.Gotham
-    label.TextSize = self.isMobile and 14 or 12
+    label.TextSize = 12
     label.Parent = container
 
     local enabled = default
@@ -1307,18 +1220,14 @@ function ModernUI:_createSlider(window, text, min, max, default, callback)
     default = default or min
     callback = callback or function() end
 
-    -- Mobile: Höhere Slider für bessere Touch-Bedienung
-    local trackHeight = self.isMobile and 16 or 12
-    local containerHeight = self.isMobile and 60 or 50
-
     local container = Instance.new('Frame')
     container.Name = 'SliderContainer'
-    container.Size = UDim2.new(1, 0, 0, containerHeight)
+    container.Size = UDim2.new(1, 0, 0, 50)
     container.Position = UDim2.new(0, 0, 0, window._nextY)
     container.BackgroundTransparency = 1
     container.Parent = window.content
     
-    window._nextY = window._nextY + (self.isMobile and 65 or 55)
+    window._nextY = window._nextY + 55
 
     local label = Instance.new('TextLabel')
     label.Name = 'Label'
@@ -1346,9 +1255,8 @@ function ModernUI:_createSlider(window, text, min, max, default, callback)
 
     local track = Instance.new('Frame')
     track.Name = 'Track'
-    track.Size = UDim2.new(1, 0, 0, trackHeight)
-    local trackY = self.isMobile and 38 or 28
-    track.Position = UDim2.new(0, 0, 0, trackY)
+    track.Size = UDim2.new(1, 0, 0, 12)
+    track.Position = UDim2.new(0, 0, 0, 28)
     track.BackgroundColor3 = self.options.theme.surface
     track.BorderSizePixel = 0
     track.Parent = container
