@@ -39,7 +39,7 @@ function SettingsTab.Build(ui, afterTab, deps)
             attempts = attempts + 1
             if attempts < 5 then  -- Reduced from 10
                 print("[SettingsTab] ConfigManager not ready, waiting... (attempt " .. attempts .. "/5)")
-                task.wait(0.2)  -- Reduced from 0.5
+                task.wait(0.01)
             end
         end
     end
@@ -382,7 +382,7 @@ function SettingsTab.Build(ui, afterTab, deps)
         
         -- AutoLoad Status beim Start anzeigen (aber nur visuell, nicht automatisch ändern)
         task.spawn(function()
-            task.wait(0.2) -- Reduced from 0.5 seconds
+            task.wait(0.01)
             
             local auto = nil
             if ConfigSystem.getAutoLoad then
